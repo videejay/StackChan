@@ -6,10 +6,8 @@
 #pragma once
 
 #include "../avatar/avatar.h"
+#include <lvgl.h>
 #include <memory>
-
-struct lv_font_t;
-struct lv_obj_t;
 
 namespace stackchan::avatar {
 

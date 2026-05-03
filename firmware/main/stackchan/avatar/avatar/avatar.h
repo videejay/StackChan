@@ -17,6 +17,7 @@ namespace stackchan::avatar {
  */
 class Avatar {
 public:
+    virtual ~Avatar() = default;
     /**
      * @brief Update avatar, trigger all elements, decorators and modifiers to update
      *

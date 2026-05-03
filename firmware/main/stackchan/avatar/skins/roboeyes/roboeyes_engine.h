@@ -10,10 +10,7 @@
 
 #include <cstdint>
 #include <lvgl.h>
-
-namespace uitk::lvgl_cpp {
-class Container;
-}
+#include <smooth_lvgl.hpp>
 
 namespace stackchan::avatar {
 

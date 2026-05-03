@@ -7,7 +7,7 @@
  */
 #include "roboeyes_engine.h"
 
-#include "../../utils/random.h"
+#include "../../../utils/random.h"
 #include <hal/hal.h>
 #include <lvgl.h>
 #include <smooth_lvgl.hpp>
