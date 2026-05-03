@@ -250,13 +250,14 @@ void StackChanAvatarDisplay::SetupUI()
 
     ESP_LOGI(TAG, "Creating Stack-chan Avatar...");
 
-    auto avatar = std::make_unique<DefaultAvatar>();
-    avatar->init(lv_screen_active());
-    avatar->getPanel()->onClick().connect([]() {
-        if (hal_bridge::is_xiaozhi_ready()) {
-            hal_bridge::toggle_xiaozhi_chat_state();
-        }
-    });
+    auto avatar = make_avatar_from_settings(lv_screen_active());
+    if (avatar->getPanel() != nullptr) {
+        avatar->getPanel()->onClick().connect([]() {
+            if (hal_bridge::is_xiaozhi_ready()) {
+                hal_bridge::toggle_xiaozhi_chat_state();
+            }
+        });
+    }
 
     stackchan.attachAvatar(std::move(avatar));
     stackchan.addModifier(std::make_unique<BreathModifier>());

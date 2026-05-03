@@ -83,9 +83,8 @@ void AppAvatar::onOpen()
     // Destroy loading page
     loading_page.reset();
 
-    // Create default avatar
-    auto avatar = std::make_unique<avatar::DefaultAvatar>();
-    avatar->init(lv_screen_active());
+    // Create avatar (skin from Settings display.avatar_skin)
+    auto avatar = avatar::make_avatar_from_settings(lv_screen_active());
     GetStackChan().attachAvatar(std::move(avatar));
 
     /* ------------------------------- BLE events ------------------------------- */

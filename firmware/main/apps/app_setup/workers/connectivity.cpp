@@ -24,9 +24,8 @@ WifiSetupWorker::WifiSetupWorker()
     _last_state  = State::None;
     _is_first_in = true;
 
-    // Create default avatar
-    auto avatar = std::make_unique<avatar::DefaultAvatar>();
-    avatar->init(lv_screen_active(), &lv_font_montserrat_24);
+    // Create avatar (eyes/mouth visibility customized below)
+    auto avatar = avatar::make_avatar_from_settings(lv_screen_active(), &lv_font_montserrat_24);
     avatar->leftEye().setVisible(false);
     avatar->rightEye().setVisible(false);
     avatar->mouth().setVisible(false);

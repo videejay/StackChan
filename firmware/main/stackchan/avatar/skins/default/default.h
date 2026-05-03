@@ -22,7 +22,7 @@ public:
     lv_color_t secondaryColor = lv_color_black();
 
     void init(lv_obj_t* parent, const lv_font_t* font = &lv_font_montserrat_16);
-    uitk::lvgl_cpp::Container* getPanel() const;
+    uitk::lvgl_cpp::Container* getPanel() const override;
 
 private:
     std::unique_ptr<uitk::lvgl_cpp::Container> _pannel;
