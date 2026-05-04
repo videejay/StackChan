@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "stackchan_asset_provider.hpp"
 #include <memory>
 #include <mooncake_log.h>
 #include <nvs_flash.h>
@@ -31,6 +32,8 @@ void Hal::init()
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    stackchan_assets::early_init_launcher_assets();
 
     xiaozhi_board_init();
     xiaozhi_mcp_init();

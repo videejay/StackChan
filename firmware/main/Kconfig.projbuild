@@ -991,3 +991,44 @@ menu "BLE prph Configuration"
             Use this option to enable resolving peer's address.
 
 endmenu
+
+menu "StackChan Launcher UI assets"
+
+    config STACKCHAN_LITTLEFS_UI_ASSETS
+        bool "Mount LittleFS for Launcher UI overrides (icons/background)"
+        default y
+        help
+            When enabled (and the userdata/littlefs partition is present),
+            UI files are loaded from mount path + assets subfolder BEFORE falling back
+            to embedded placeholders (Launcher-friendly).
+
+            Disable if building without a userdata/littlefs region.
+
+    config STACKCHAN_LITTLEFS_PARTITION_LABEL
+        string "LittleFS partition label"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default "userdata"
+
+    config STACKCHAN_LITTLEFS_MOUNT_PATH
+        string "VFS mount path"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default "/launcherfs"
+
+    config STACKCHAN_LITTLEFS_ASSETS_SUBPATH
+        string "Subfolder holding icon/png/bin files under mount path"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default "assets"
+
+    config STACKCHAN_LITTLEFS_FORMAT_IF_MOUNT_FAILED
+        bool "Format LittleFS if mount fails"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default n
+        help
+            Erases userdata and formats filesystem on mount failure — use cautiously.
+
+    config STACKCHAN_LITTLEFS_MOUNT_READ_ONLY
+        bool "Mount Launcher LittleFS read-only"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default y
+
+endmenu
