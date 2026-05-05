@@ -739,23 +739,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 3.0.3
-  espressif/usb:
-    component_hash: 4f00ced5663505a368bafcb9bb6b2e4a5033cc5625b8f510755a75baadf4ff1d
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.4'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    targets:
-    - esp32s2
-    - esp32s3
-    - esp32s31
-    - esp32p4
-    - esp32h4
-    - linux
-    version: 1.4.0
   espressif/usb_host_uvc:
     component_hash: b0cb9a3a2eaa09dc6e5cc3e47e04d0a73e47c2d3dcfb3afce959224a1fe5fb5e
     dependencies:
@@ -797,6 +780,16 @@ dependencies:
     source:
       type: idf
     version: 5.5.4
+  joltwallet/littlefs:
+    component_hash: dcea25bcef2de023f089f5f01e8d8c46ad1b8ffef75861ad5ffb4098555839df
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.20.4
   lvgl/lvgl:
     component_hash: 17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
     dependencies: []
@@ -920,6 +913,7 @@ direct_dependencies:
 - espressif/led_strip
 - espressif2022/image_player
 - idf
+- joltwallet/littlefs
 - lvgl/lvgl
 - tny-robotics/sh1106-esp-idf
 - txp666/otto-emoji-gif-component
@@ -927,6 +921,6 @@ direct_dependencies:
 - waveshare/esp_lcd_sh8601
 - waveshare/esp_lcd_touch_cst9217
 - wvirgil123/sscma_client
-manifest_hash: 350e17991f1a3226438480b027525b7cde67c34ed4ec6c5847cdfcb22e18dc4a
+manifest_hash: 531df83ab78e70214536c50a493e87233301ba569c487bc2840216e4a9219bd5
 target: esp32s3
 version: 2.0.0

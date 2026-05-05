@@ -290,24 +290,26 @@ if(CONFIG_IDF_TARGET_ESP32S3)
     list(APPEND SOURCES "${XIAOZHI_MAIN_DIR}/boards/common/esp32_camera.cc")
 endif()
 
-find_program(STACKCHAN_PYTHON_EXECUTABLE NAMES python python3 REQUIRED)
 set(STACKCHAN_LAUNCHER_ASSETS_GEN_C ${CMAKE_BINARY_DIR}/stackchan_launcher_assets.gen.c)
-file(GLOB ASSETS_BIN_INPUT_FILES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin/*")
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    find_program(STACKCHAN_PYTHON_EXECUTABLE NAMES python python3 REQUIRED)
+    file(GLOB ASSETS_BIN_INPUT_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin/*")
 
-add_custom_command(
-    OUTPUT ${STACKCHAN_LAUNCHER_ASSETS_GEN_C}
-    COMMAND ${STACKCHAN_PYTHON_EXECUTABLE}
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/tools/gen_launcher_embedded_assets.py"
-        "--assets-bin" "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin"
-        "--out" "${STACKCHAN_LAUNCHER_ASSETS_GEN_C}"
-    DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/tools/gen_launcher_embedded_assets.py"
-        ${ASSETS_BIN_INPUT_FILES}
-    COMMENT "Generate embedded StackChan Launcher UI assets (fallback)"
-    VERBATIM
-)
-list(APPEND SOURCES ${STACKCHAN_LAUNCHER_ASSETS_GEN_C})
+    add_custom_command(
+        OUTPUT ${STACKCHAN_LAUNCHER_ASSETS_GEN_C}
+        COMMAND ${STACKCHAN_PYTHON_EXECUTABLE}
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/tools/gen_launcher_embedded_assets.py"
+            "--assets-bin" "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin"
+            "--out" "${STACKCHAN_LAUNCHER_ASSETS_GEN_C}"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/tools/gen_launcher_embedded_assets.py"
+            ${ASSETS_BIN_INPUT_FILES}
+        COMMENT "Generate embedded StackChan Launcher UI assets (fallback)"
+        VERBATIM
+    )
+    list(APPEND SOURCES ${STACKCHAN_LAUNCHER_ASSETS_GEN_C})
+endif()
 
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
@@ -341,47 +343,48 @@ idf_component_register(SRCS ${SOURCES}
 
 # Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
 # If BOARD_NAME is empty, use BOARD_TYPE
-if(NOT BOARD_NAME)
-    set(BOARD_NAME ${BOARD_TYPE})
-endif()
-target_compile_definitions(${COMPONENT_LIB}
-                    PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\" BOARD_NAME=\"${BOARD_NAME}\"
-                    PRIVATE BUILTIN_TEXT_FONT=${BUILTIN_TEXT_FONT} BUILTIN_ICON_FONT=${BUILTIN_ICON_FONT}
-                    )
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    if(NOT BOARD_NAME)
+        set(BOARD_NAME ${BOARD_TYPE})
+    endif()
+    target_compile_definitions(${COMPONENT_LIB}
+                        PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\" BOARD_NAME=\"${BOARD_NAME}\"
+                        PRIVATE BUILTIN_TEXT_FONT=${BUILTIN_TEXT_FONT} BUILTIN_ICON_FONT=${BUILTIN_ICON_FONT}
+                        )
 
-# Add generation rules
-add_custom_command(
-    OUTPUT ${LANG_HEADER}
-    COMMAND python ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
-            --language "${LANG_DIR}"
-            --output "${LANG_HEADER}"
-    DEPENDS
-        ${LANG_JSON}
-        ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
-    COMMENT "Generating ${LANG_DIR} language config"
-)
+    # Add generation rules
+    add_custom_command(
+        OUTPUT ${LANG_HEADER}
+        COMMAND python ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
+                --language "${LANG_DIR}"
+                --output "${LANG_HEADER}"
+        DEPENDS
+            ${LANG_JSON}
+            ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
+        COMMENT "Generating ${LANG_DIR} language config"
+    )
 
-# Force build generation dependencies
-add_custom_target(lang_header ALL
-    DEPENDS ${LANG_HEADER}
-)
+    # Force build generation dependencies
+    add_custom_target(lang_header ALL
+        DEPENDS ${LANG_HEADER}
+    )
 
-# Find ESP-SR component dynamically
-find_component_by_pattern("espressif__esp-sr" ESP_SR_COMPONENT ESP_SR_COMPONENT_PATH)
-if(ESP_SR_COMPONENT_PATH)
-    set(ESP_SR_MODEL_PATH "${ESP_SR_COMPONENT_PATH}/model")
-endif()
+    # Find ESP-SR component dynamically
+    find_component_by_pattern("espressif__esp-sr" ESP_SR_COMPONENT ESP_SR_COMPONENT_PATH)
+    if(ESP_SR_COMPONENT_PATH)
+        set(ESP_SR_MODEL_PATH "${ESP_SR_COMPONENT_PATH}/model")
+    endif()
 
-# Find xiaozhi-fonts component dynamically
-find_component_by_pattern("xiaozhi-fonts" XIAOZHI_FONTS_COMPONENT XIAOZHI_FONTS_COMPONENT_PATH)
-if(XIAOZHI_FONTS_COMPONENT_PATH)
-    set(XIAOZHI_FONTS_PATH "${XIAOZHI_FONTS_COMPONENT_PATH}")
-endif()
+    # Find xiaozhi-fonts component dynamically
+    find_component_by_pattern("xiaozhi-fonts" XIAOZHI_FONTS_COMPONENT XIAOZHI_FONTS_COMPONENT_PATH)
+    if(XIAOZHI_FONTS_COMPONENT_PATH)
+        set(XIAOZHI_FONTS_PATH "${XIAOZHI_FONTS_COMPONENT_PATH}")
+    endif()
 
-if(CONFIG_BOARD_TYPE_ESP_HI)
-set(URL "https://github.com/espressif2022/image_player/raw/main/test_apps/test_8bit")
-set(EMOJI_DIR "${CMAKE_BINARY_DIR}/emoji")
-file(MAKE_DIRECTORY ${EMOJI_DIR})
+    if(CONFIG_BOARD_TYPE_ESP_HI)
+    set(URL "https://github.com/espressif2022/image_player/raw/main/test_apps/test_8bit")
+    set(EMOJI_DIR "${CMAKE_BINARY_DIR}/emoji")
+    file(MAKE_DIRECTORY ${EMOJI_DIR})
 
 # List all files to download
 set(FILES_TO_DOWNLOAD "")
@@ -413,6 +416,7 @@ foreach(FILENAME IN LISTS FILES_TO_DOWNLOAD)
     endif()
 endforeach()
 
+    endif()
 endif()
 
 # StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS — no mmap `assets.bin` flash.

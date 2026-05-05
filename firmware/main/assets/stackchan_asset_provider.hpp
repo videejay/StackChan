@@ -18,10 +18,11 @@ namespace stackchan_assets {
 
 enum class LauncherAssetSource : uint8_t {
     Embedded,
+    SDCard,
     LittleFS,
 };
 
-/** LittleFS-first (when enabled + mounted), else embedded blobs. Returned pointer stays valid thanks to filesystem cache vectors. */
+/** SD-card first, LittleFS second, then embedded blobs. Returned pointer stays valid thanks to filesystem cache vectors. */
 bool get_launcher_ui_asset_bytes(std::string_view name, const uint8_t** out_ptr, std::size_t* out_len,
                                  LauncherAssetSource* out_src = nullptr);
 
