@@ -15,6 +15,7 @@
 #include <lvgl.h>
 #include <lvgl_theme.h>
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <assets/lang_config.h>
 #include <hal/hal.h>
 
@@ -250,8 +251,7 @@ void StackChanAvatarDisplay::SetupUI()
 
     ESP_LOGI(TAG, "Creating Stack-chan Avatar...");
 
-    auto avatar = std::make_unique<DefaultAvatar>();
-    avatar->init(lv_screen_active());
+    auto avatar = createConfiguredAvatar(lv_screen_active());
     avatar->getPanel()->onClick().connect([]() {
         if (hal_bridge::is_xiaozhi_ready()) {
             hal_bridge::toggle_xiaozhi_chat_state();

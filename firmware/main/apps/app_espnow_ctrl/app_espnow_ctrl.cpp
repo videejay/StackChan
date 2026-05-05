@@ -12,6 +12,7 @@
 #include <assets/assets.h>
 #include <smooth_lvgl.hpp>
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <apps/common/common.h>
 #include <cstdint>
 #include <mutex>
@@ -72,9 +73,7 @@ void AppEspnowControl::onOpen()
 
     auto& stackchan = GetStackChan();
 
-    auto avatar = std::make_unique<avatar::DefaultAvatar>();
-    avatar->init(lv_screen_active());
-    stackchan.attachAvatar(std::move(avatar));
+    stackchan.attachAvatar(avatar::createConfiguredAvatar(lv_screen_active()));
 
     stackchan.clearModifiers();
     stackchan.addModifier(std::make_unique<BreathModifier>());

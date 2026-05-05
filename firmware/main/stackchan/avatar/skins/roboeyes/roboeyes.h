@@ -4,19 +4,18 @@
  * SPDX-License-Identifier: MIT
  */
 #pragma once
+
 #include "../../avatar/avatar.h"
 #include "../../avatar/elements/feature.h"
+#include "../default/default.h"
+
 #include <lvgl.h>
 #include <smooth_lvgl.hpp>
 #include <memory>
 
 namespace stackchan::avatar {
 
-/**
- * @brief
- *
- */
-class DefaultAvatar : public Avatar {
+class RoboEyesAvatar : public Avatar {
 public:
     lv_color_t primaryColor   = lv_color_white();
     lv_color_t secondaryColor = lv_color_black();
@@ -25,17 +24,13 @@ public:
     uitk::lvgl_cpp::Container* getPanel() const override;
 
 private:
-    std::unique_ptr<uitk::lvgl_cpp::Container> _pannel;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
 };
 
-/**
- * @brief
- *
- */
-class DefaultEyes : public Feature {
+class RoboEyesEye : public Feature {
 public:
-    DefaultEyes(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor, bool isLeftEye);
-    ~DefaultEyes();
+    RoboEyesEye(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor, bool isLeftEye);
+    ~RoboEyesEye();
 
     void setPosition(const uitk::Vector2i& position) override;
     void setWeight(int weight) override;
@@ -43,24 +38,43 @@ public:
     void setEmotion(const Emotion& emotion) override;
     void setVisible(bool visible) override;
     void setSize(int size) override;
+    void _update() override;
 
 private:
-    bool _is_left_eye    = false;
-    int _eyelid_offset_y = 0;
+    void applyTargetFromState();
+    void render();
+    int moodTopCoverHeight() const;
+    int moodTopCoverRotation() const;
+
+    bool _is_left_eye = false;
+    Emotion _emotion = Emotion::Neutral;
+
+    int _current_x = 0;
+    int _current_y = 0;
+    int _current_width = 74;
+    int _current_height = 54;
+    int _current_radius = 14;
+    int _current_top_cover = 0;
+    int _current_bottom_cover = 0;
+
+    int _target_x = 0;
+    int _target_y = 0;
+    int _target_width = 74;
+    int _target_height = 54;
+    int _target_radius = 14;
+    int _target_top_cover = 0;
+    int _target_bottom_cover = 0;
 
     std::unique_ptr<uitk::lvgl_cpp::Container> _container;
     std::unique_ptr<uitk::lvgl_cpp::Container> _eye;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _eyelid;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _top_cover;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _bottom_cover;
 };
 
-/**
- * @brief
- *
- */
-class DefaultMouth : public Feature {
+class RoboEyesMouth : public Feature {
 public:
-    DefaultMouth(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor);
-    ~DefaultMouth();
+    RoboEyesMouth(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor);
+    ~RoboEyesMouth();
 
     void setPosition(const uitk::Vector2i& position) override;
     void setWeight(int weight) override;
@@ -69,27 +83,6 @@ public:
 
 private:
     std::unique_ptr<uitk::lvgl_cpp::Container> _mouth;
-};
-
-/**
- * @brief
- *
- */
-class DefaultSpeechBubble : public SpeechBubble {
-public:
-    DefaultSpeechBubble(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor, const lv_font_t* font);
-    ~DefaultSpeechBubble();
-
-    void setSpeech(std::string_view text) override;
-    void clearSpeech() override;
-    void setVisible(bool visible) override;
-    void setTextFont(void* font) override;
-
-private:
-    std::unique_ptr<uitk::lvgl_cpp::Container> _container;
-    std::unique_ptr<uitk::lvgl_cpp::Image> _arrow;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _bubble;
-    std::unique_ptr<uitk::lvgl_cpp::Label> _text;
 };
 
 }  // namespace stackchan::avatar

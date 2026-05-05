@@ -318,6 +318,8 @@ idf_component_register(SRCS ${SOURCES}
                         smooth_ui_toolkit
                     )
 
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+
 # Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
 # If BOARD_NAME is empty, use BOARD_TYPE
 if(NOT BOARD_NAME)
@@ -531,4 +533,6 @@ if ("${size}" AND "${offset}")
     endif()
 else()
     message(STATUS "Assets partition not found, using v1 partition table")
+endif()
+
 endif()
