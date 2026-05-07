@@ -4,6 +4,19 @@
  * SPDX-License-Identifier: MIT
  */
 #pragma once
+//
+// HeadPetModifier — touch-driven affect + non-visual wake fallback.
+//
+// Touch start: fires head_pet_started perception event + HeartDecorator + Happy
+// emotion (existing behavior).
+// Held for >= kHoldToListenMs (2 s default): fires WakeWordInvoke("head_pet_hold")
+// once per session.
+//   - Opens the listen window (mic uplink to server) just like face-detected.
+//   - Works in the dark, where face detection can't fire.
+// Touch end: fires head_pet_ended perception event.
+//
+// kHoldToListenMs lives at the top of head_pet.cpp for one-line tuning.
+//
 #include "../modifiable.h"
 #include "../avatar/decorators/decorators.h"
 #include "../utils/random.h"
@@ -142,10 +155,11 @@ private:
 
     // 信号相关
     int _signal_connection;
+    volatile bool _event_press   = false;
     volatile bool _event_swipe   = false;
     volatile bool _event_release = false;
 
-    // 状态机相关
+    // Affect state machine
     bool _in_happy_state     = false;
     bool _is_waiting_restore = false;
     uint32_t _restore_tick   = 0;
@@ -153,7 +167,12 @@ private:
     int _heart_decorator_id = -1;
     int _shy_decorator_id   = -1;
 
-    // 记忆相关
+    // Hold-to-listen state
+    bool _is_touched         = false;  // Press received, Release not yet
+    bool _hold_wake_fired    = false;  // wake invoked this touch session
+    uint32_t _touch_start_ms = 0;
+
+    // Memory of pre-pet pose
     avatar::Emotion _prev_emotion = avatar::Emotion::Neutral;
     int32_t _prev_yaw             = 0;
     int32_t _prev_pitch           = 0;

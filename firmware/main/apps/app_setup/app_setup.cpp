@@ -169,5 +169,7 @@ void AppSetup::onClose()
 
     if (_need_warm_reset) {
         GetHAL().requestWarmReboot(6);
+    } else {
+        GetHAL().requestXiaozhiStart();
     }
 }

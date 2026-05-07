@@ -15,6 +15,10 @@
 #include <lvgl.h>
 #include <lvgl_theme.h>
 #include <stackchan/stackchan.h>
+#include <stackchan/face/face_detector.h>
+#include <stackchan/sound_localizer.h>
+#include <stackchan/avatar/decorators/decorators.h>
+#include "application.h"
 #include <assets/lang_config.h>
 #include <hal/hal.h>
 
@@ -190,12 +194,50 @@ StackChanAvatarDisplay::StackChanAvatarDisplay(esp_lcd_panel_io_handle_t panel_i
         Unlock();
     }
 
+    // Bubble auto-clear timer (fires after speaking ends)
+    esp_timer_create_args_t bubble_timer_args = {
+        .callback = [](void* arg) {
+            auto* display = static_cast<StackChanAvatarDisplay*>(arg);
+            display->ClearChatMessages();
+        },
+        .arg                   = this,
+        .dispatch_method       = ESP_TIMER_TASK,
+        .name                  = "bubble_clear_timer",
+        .skip_unhandled_events = false,
+    };
+    esp_timer_create(&bubble_timer_args, &bubble_clear_timer_);
+
+    // Thinking timer: fires after 1.5s in listening state to show thinking animation
+    esp_timer_create_args_t thinking_timer_args = {
+        .callback = [](void* arg) {
+            auto* display = static_cast<StackChanAvatarDisplay*>(arg);
+            if (display->in_listening_status_) {
+                display->SetEmotion("thinking");
+            }
+        },
+        .arg                   = this,
+        .dispatch_method       = ESP_TIMER_TASK,
+        .name                  = "thinking_timer",
+        .skip_unhandled_events = false,
+    };
+    esp_timer_create(&thinking_timer_args, &thinking_timer_);
+
     // Robot will be created later in SetupXiaoZhiUI()
 }
 
 StackChanAvatarDisplay::~StackChanAvatarDisplay()
 {
     ESP_LOGI(TAG, "Destroying StackChanAvatarDisplay");
+
+    if (thinking_timer_ != nullptr) {
+        esp_timer_stop(thinking_timer_);
+        esp_timer_delete(thinking_timer_);
+    }
+
+    if (bubble_clear_timer_ != nullptr) {
+        esp_timer_stop(bubble_clear_timer_);
+        esp_timer_delete(bubble_clear_timer_);
+    }
 
     if (preview_timer_ != nullptr) {
         esp_timer_stop(preview_timer_);
@@ -271,6 +313,8 @@ void StackChanAvatarDisplay::SetupUI()
 
     // GetHAL().startStackChanAutoUpdate(24);
 
+    FaceDetector::getInstance().start();
+
     ESP_LOGI(TAG, "Avatar created and started");
 }
 
@@ -284,6 +328,14 @@ void StackChanAvatarDisplay::LvglLock()
 void StackChanAvatarDisplay::LvglUnlock()
 {
     Unlock();
+}
+
+static void set_left_leds(uint8_t r, uint8_t g, uint8_t b)
+{
+    for (int i = 0; i < 6; i++) {
+        GetHAL().setRgbColor(i, r, g, b);
+    }
+    GetHAL().refreshRgb();
 }
 
 void StackChanAvatarDisplay::SetEmotion(const char* emotion)
@@ -319,6 +371,14 @@ void StackChanAvatarDisplay::SetEmotion(const char* emotion)
         is_sleeping_ = true;
         // avatar.mouth().setWeight(10);
 
+        // Stop face tracking
+        FaceDetector::getInstance().setEnabled(false);
+        if (face_tracking_modifier_id_ >= 0) {
+            stackchan.removeModifier(face_tracking_modifier_id_);
+            face_tracking_modifier_id_ = -1;
+        }
+        stackchan.rightNeonLight().setColor(0, 0, 0);
+
         // Stop idle motion
         ESP_LOGW(TAG, "Stop idle motion");
         if (idle_motion_modifier_id_ >= 0) {
@@ -332,10 +392,42 @@ void StackChanAvatarDisplay::SetEmotion(const char* emotion)
         auto& motion = GetStackChan().motion();
         motion.pitchServo().moveWithSpeed(0, 80);
 
+    } else if (strcmp(emotion, "thinking") == 0) {
+        if (speaking_modifier_id_ >= 0) {
+            stackchan.removeModifier(speaking_modifier_id_);
+            avatar.mouth().setWeight(0);
+            speaking_modifier_id_ = -1;
+        }
+
+        avatar.setEmotion(Emotion::Doubt);
+
+        if (thinking_modifier_id_ < 0) {
+            thinking_modifier_id_ = stackchan.addModifier(std::make_unique<ThinkingModifier>());
+        }
+
+        if (in_listening_status_) {
+            thinking_led_pending_ = true;
+            set_left_leds(50, 25, 0);
+        }
     } else if (strcmp(emotion, "doubtful") == 0) {
         avatar.setEmotion(Emotion::Doubt);
+    } else if (strcmp(emotion, "surprised") == 0) {
+        avatar.setEmotion(Emotion::Surprise);
+    } else if (strcmp(emotion, "loving") == 0) {
+        avatar.setEmotion(Emotion::Love);
+        // Eye delta for Love is subtle (soft squint); the recognisable hearts
+        // are this decorator overlay. Same pattern as the touch-pet flow in
+        // head_pet.h. 4 s lifetime, 500 ms heart-spawn cadence.
+        avatar.removeDecorator(love_decorator_id_);
+        love_decorator_id_ = avatar.addDecorator(
+            std::make_unique<HeartDecorator>(lv_screen_active(), 4000, 500));
     } else {
+        // Brief magenta pip on the left ring is a visible signal that an
+        // unrecognised emotion arrived — otherwise this branch is silent and
+        // future emoji additions can regress invisibly. The LED gets
+        // overwritten by the next state-change; the warning log persists.
         ESP_LOGW(TAG, "Unknown emotion: %s, using NEUTRAL", emotion);
+        set_left_leds(40, 0, 40);
         avatar.setEmotion(Emotion::Neutral);
     }
 
@@ -370,6 +462,10 @@ void StackChanAvatarDisplay::SetChatMessage(const char* role, const char* conten
 
 void StackChanAvatarDisplay::ClearChatMessages()
 {
+    if (bubble_clear_timer_) {
+        esp_timer_stop(bubble_clear_timer_);
+    }
+
     auto& stackchan = GetStackChan();
     if (!stackchan.hasAvatar()) {
         return;
@@ -455,22 +551,47 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
 
     DisplayLockGuard lock(this);
 
+    // Face detection is decoupled from chat state — runs whenever
+    // Dotty isn't sleeping. The previous gating (enable in STANDBY,
+    // disable in everything else) silently killed walk-up greetings
+    // whenever the device missed the transition back to STANDBY,
+    // because face_detected events stopped reaching the bridge.
+    // The face *tracking* modifier (servo head movement) is still
+    // gated below so the head doesn't track faces mid-reply.
+    if (!is_sleeping_) {
+        FaceDetector::getInstance().setEnabled(true);
+    }
+
     bool is_idle      = false;
     bool is_listening = false;
 
     if (strcmp(status, Lang::Strings::LISTENING) == 0) {
+        in_listening_status_ = true;
         if (speaking_modifier_id_ >= 0) {
             // Start speaking
             stackchan.removeModifier(speaking_modifier_id_);
             avatar.mouth().setWeight(0);
             speaking_modifier_id_ = -1;
         }
+        if (thinking_modifier_id_ >= 0) {
+            stackchan.removeModifier(thinking_modifier_id_);
+            avatar.mouth().setWeight(0);
+            thinking_modifier_id_ = -1;
+        }
 
-        GetHAL().setRgbColor(0, 0, 50, 0);
-        GetHAL().refreshRgb();
+        thinking_led_pending_ = false;
+        set_left_leds(0, 50, 0);
+
+        esp_timer_stop(bubble_clear_timer_);
+        esp_timer_start_once(bubble_clear_timer_, 2500 * 1000);
+
+        esp_timer_stop(thinking_timer_);
 
     } else if (strcmp(status, Lang::Strings::STANDBY) == 0) {
         _is_xiaozhi_ready = true;
+        in_listening_status_ = false;
+        thinking_led_pending_ = false;
+        esp_timer_stop(thinking_timer_);
 
         if (speaking_modifier_id_ >= 0) {
             // Stop speaking
@@ -478,19 +599,35 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
             avatar.mouth().setWeight(0);
             speaking_modifier_id_ = -1;
         }
+        if (thinking_modifier_id_ >= 0) {
+            stackchan.removeModifier(thinking_modifier_id_);
+            avatar.mouth().setWeight(0);
+            thinking_modifier_id_ = -1;
+        }
 
         is_idle = true;
 
-        GetHAL().setRgbColor(0, 0, 0, 0);
-        GetHAL().refreshRgb();
+        set_left_leds(0, 0, 0);
+
+        esp_timer_stop(bubble_clear_timer_);
+        esp_timer_start_once(bubble_clear_timer_, 2500 * 1000);
 
     } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
+        in_listening_status_ = false;
+        thinking_led_pending_ = false;
+        esp_timer_stop(thinking_timer_);
+        if (thinking_modifier_id_ >= 0) {
+            stackchan.removeModifier(thinking_modifier_id_);
+            thinking_modifier_id_ = -1;
+        }
+
         if (speaking_modifier_id_ < 0) {
             speaking_modifier_id_ = stackchan.addModifier(std::make_unique<SpeakingModifier>());
         }
 
-        GetHAL().setRgbColor(0, 0, 0, 50);
-        GetHAL().refreshRgb();
+        esp_timer_stop(bubble_clear_timer_);
+
+        set_left_leds(0, 0, 50);
     } else {
         avatar.setSpeech(status);
     }
@@ -502,7 +639,53 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
             idle_motion_modifier_id_     = stackchan.addModifier(std::make_unique<IdleMotionModifier>());
             idle_expression_modifier_id_ = stackchan.addModifier(std::make_unique<IdleExpressionModifier>());
         }
+
+        // Face detector is enabled at function entry (decoupled from
+        // chat state). Add the tracking modifier so the head follows
+        // the bbox while idle.
+        if (face_tracking_modifier_id_ < 0) {
+            // FaceTrackingModifier resolves IdleMotionModifier by stable
+            // name on each pause/resume rather than caching a pool ID,
+            // so no handle is passed at construction.
+            face_tracking_modifier_id_ = stackchan.addModifier(
+                std::make_unique<FaceTrackingModifier>());
+        }
+        // Right ring middle pixels (8-10) stay dark in idle. The previous
+        // always-on cyan "face-detection mode active" indicator was visual
+        // noise — face detector is now permanently on (since fix `8d74dd7`
+        // decoupled it from chat state) so a continuous indicator carried
+        // no actionable signal. The privacy LEDs at indices 6 and 11 already
+        // give the family the "is the camera on?" answer (red on index 11).
+        // Future: tie indices 8-10 to face_tracking state (green when a
+        // face is actively being tracked) — that's the "is Dotty looking
+        // at me right now?" signal worth lighting.
+        stackchan.rightNeonLight().setColor(0, 0, 0);
+
+        // Phase 1.2: register the ambient sound localizer once. Its
+        // callback fires from the audio input task whenever stereo
+        // PCM is read (always, since wake-word is running at idle),
+        // emits sound_event(direction) on direction change.
+        static bool s_sound_localizer_registered = false;
+        if (!s_sound_localizer_registered) {
+            s_sound_localizer_registered = true;
+            static stackchan::SoundLocalizer s_sound_localizer;
+            Application::GetInstance().GetAudioService().OnStereoFrame(
+                [](const std::vector<int16_t>& lr) {
+                    s_sound_localizer.OnStereoFrame(lr);
+                });
+        }
     } else {
+        // Stop face *tracking* (servo follow) — but leave the detector
+        // running so face_detected events still flow to the bridge
+        // throughout the listen / think / speak phases.
+        if (face_tracking_modifier_id_ >= 0) {
+            stackchan.removeModifier(face_tracking_modifier_id_);
+            face_tracking_modifier_id_ = -1;
+        }
+        // Clear cyan mode-active LED. The left LED is owned by the chat-state
+        // set_left_leds() call earlier in this function, so don't touch it here.
+        stackchan.rightNeonLight().setColor(0, 0, 0);
+
         // Stop idle motion
         ESP_LOGW(TAG, "Stop idle motion");
         if (idle_motion_modifier_id_ >= 0) {

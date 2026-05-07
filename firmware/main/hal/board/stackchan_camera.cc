@@ -16,6 +16,8 @@
 #include "board.h"
 #include "display.h"
 #include "stackchan_camera.h"
+#include <stackchan/face/camera_arbiter.h>
+#include <stackchan/privacy/camera_peripheral_guard.h>
 #include "esp_jpeg_common.h"
 #include "jpg/image_to_jpeg.h"
 #include "jpg/jpeg_to_image.h"
@@ -332,7 +334,12 @@ StackChanCamera::StackChanCamera(const esp_video_init_config_t& config)
         sensor_format_ = 0;
         return;
     }
-
+    // Privacy LED step 4: do NOT issue VIDIOC_STREAMON here. The
+    // CameraPeripheralGuard (face detector enable, MCP take_photo, etc.)
+    // is now the only path that turns the V4L2 stream on. The camera is
+    // initialised but quiescent until a consumer needs it; the red
+    // privacy LED then becomes a true peripheral indicator.
+    ESP_LOGI(TAG, "Camera init success (stream off; awaiting first guard)");
 #ifdef CONFIG_ESP_VIDEO_ENABLE_ISP_VIDEO_DEVICE
     // 当启用 ISP 时，ISP 需要一些照片来初始化参数，因此开启后后台拍摄5s照片并丢弃
     xTaskCreate(
@@ -373,6 +380,9 @@ StackChanCamera::~StackChanCamera()
         int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         ioctl(video_fd_, VIDIOC_STREAMOFF, &type);
     }
+    // Defensively tear the stream down via the standard path so the
+    // peripheral state matches expectations on shutdown.
+    stopStreaming();
     for (auto& b : mmap_buffers_) {
         if (b.start && b.length) {
             munmap(b.start, b.length);
@@ -394,11 +404,43 @@ void StackChanCamera::SetExplainUrl(const std::string& url, const std::string& t
 
 bool StackChanCamera::Capture()
 {
+    // Privacy LED step 3: stamp the moment we begin a capture, regardless
+    // of whether arbitration succeeds. The bridge polls this via MCP
+    // get_privacy_state to confirm the camera was exercised after a
+    // take_photo call. esp_log_timestamp() returns ms since boot
+    // (uint32_t, wraps every ~49 days — informational use only).
+    last_capture_ts_ms_ = esp_log_timestamp();
+
     if (encoder_thread_.joinable()) {
         encoder_thread_.join();
     }
 
     if (!streaming_on_ || video_fd_ < 0) {
+        return false;
+    }
+
+    auto& arbiter = stackchan::CameraArbiter::getInstance();
+    if (!arbiter.acquireForCapture(2000)) {
+        ESP_LOGW(TAG, "Camera busy — face detector did not yield in time");
+        return false;
+    }
+    struct ArbiterGuard {
+        stackchan::CameraArbiter& a;
+        ~ArbiterGuard() { a.releaseForCapture(); }
+    } arbiter_guard{arbiter};
+
+    // Layer 1 privacy LED + V4L2 stream lifecycle. The refcounted guard
+    // brings the stream up on the 0→1 transition (synchronous; blocks
+    // ~5 s on first acquire after boot for ISP autoexposure warmup) and
+    // tears it down on 1→0. Composes with the FaceDetector guard so two
+    // simultaneous consumers keep the stream and LED steady across the
+    // overlap.
+    stackchan::privacy::CameraPeripheralGuard camera_privacy_guard;
+    if (!streaming_on_) {
+        // startStreaming() failed inside the guard ctor (logged there).
+        // The guard dtor will still flip the LED back off when this
+        // function returns; the arbiter releases via its own guard.
+        ESP_LOGE(TAG, "Capture aborted — stream not up after guard acquire");
         return false;
     }
 
@@ -851,6 +893,84 @@ bool StackChanCamera::Capture()
     return true;
 }
 
+bool StackChanCamera::isStreaming() const
+{
+    // V4L2 truth, flipped by startStreaming()/stopStreaming(). The
+    // refcounted CameraPeripheralGuard is the only legitimate caller of
+    // those, so this tracks the actual VIDIOC_STREAMON state.
+    return streaming_on_;
+}
+
+bool StackChanCamera::startStreaming()
+{
+    if (streaming_on_) {
+        // Idempotent: already streaming. Refcounted guard composes
+        // multiple consumers; only the 0→1 transition reaches this body.
+        return true;
+    }
+    if (video_fd_ < 0) {
+        // Constructor failed to open the V4L2 device. Cannot recover.
+        return false;
+    }
+
+    int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (ioctl(video_fd_, VIDIOC_STREAMON, &type) != 0) {
+        ESP_LOGE(TAG, "VIDIOC_STREAMON failed");
+        return false;
+    }
+
+#ifdef CONFIG_ESP_VIDEO_ENABLE_ISP_VIDEO_DEVICE
+    // 当启用 ISP 时，ISP 需要一些照片来初始化参数，因此开启后拍摄5s照片并丢弃
+    // Synchronous: caller blocks until the warmup completes so on return
+    // the stream is ready to dequeue. With ISP, this is ~5 s on first
+    // acquire after boot. Subsequent acquires hit the streaming_on_
+    // short-circuit above and return immediately.
+    {
+        uint16_t capture_count = 0;
+        TickType_t start       = xTaskGetTickCount();
+        TickType_t duration    = 5000 / portTICK_PERIOD_MS;  // 5s
+        while ((xTaskGetTickCount() - start) < duration) {
+            struct v4l2_buffer buf = {};
+            buf.type               = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buf.memory             = V4L2_MEMORY_MMAP;
+            if (ioctl(video_fd_, VIDIOC_DQBUF, &buf) != 0) {
+                ESP_LOGE(TAG, "VIDIOC_DQBUF failed during init");
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+                continue;
+            }
+            if (ioctl(video_fd_, VIDIOC_QBUF, &buf) != 0) {
+                ESP_LOGE(TAG, "VIDIOC_QBUF failed during init");
+            }
+            capture_count++;
+        }
+        ESP_LOGI(TAG, "Stream up, ISP warmed in %dms (%d frames)",
+                 static_cast<int>((xTaskGetTickCount() - start) * portTICK_PERIOD_MS),
+                 capture_count);
+    }
+#else
+    ESP_LOGI(TAG, "Stream up (no ISP)");
+#endif  // CONFIG_ESP_VIDEO_ENABLE_ISP_VIDEO_DEVICE
+
+    streaming_on_ = true;
+    return true;
+}
+
+void StackChanCamera::stopStreaming()
+{
+    if (!streaming_on_ || video_fd_ < 0) {
+        return;
+    }
+    int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (ioctl(video_fd_, VIDIOC_STREAMOFF, &type) != 0) {
+        ESP_LOGE(TAG, "VIDIOC_STREAMOFF failed");
+        // Fall through and clear the flag anyway so the next
+        // startStreaming() doesn't short-circuit on a stale truth.
+    } else {
+        ESP_LOGI(TAG, "Stream down");
+    }
+    streaming_on_ = false;
+}
+
 bool StackChanCamera::StreamCaptures()
 {
     if (encoder_thread_.joinable()) {
@@ -860,6 +980,13 @@ bool StackChanCamera::StreamCaptures()
     if (!streaming_on_ || video_fd_ < 0) {
         return false;
     }
+
+    // Privacy LED guard moved up to FaceDetector::processFrame() so it
+    // wraps both the StreamCaptures() capture step (~50 ms) AND the
+    // ESP-DL inference (~280 ms). The previous per-StreamCaptures scope
+    // visibly blinked the red privacy LED at the inference cadence
+    // (capture-on, inference-off, capture-on, ...). Step 4-5 replaces
+    // both with a refcounted CameraPeripheralGuard tied to STREAMON.
 
     {
         struct v4l2_buffer buf = {};
@@ -1026,11 +1153,18 @@ bool StackChanCamera::SetVFlip(bool enabled)
  */
 std::string StackChanCamera::Explain(const std::string& question)
 {
-    if (explain_url_.empty()) {
-        throw std::runtime_error("Image explain URL or token is not set");
+    return StreamJpegToBridge(explain_url_, explain_token_,
+                              {{"question", question}});
+}
+
+std::string StackChanCamera::StreamJpegToBridge(
+    const std::string& url, const std::string& token,
+    const std::vector<std::pair<std::string, std::string>>& extra_fields)
+{
+    if (url.empty()) {
+        throw std::runtime_error("Bridge URL is not set");
     }
 
-    // 创建局部的 JPEG 队列, 40 entries is about to store 512 * 40 = 20480 bytes of JPEG data
     QueueHandle_t jpeg_queue = xQueueCreate(40, sizeof(JpegChunk));
     if (jpeg_queue == nullptr) {
         ESP_LOGE(TAG, "Failed to create JPEG queue");
@@ -1077,13 +1211,13 @@ std::string StackChanCamera::Explain(const std::string& question)
     // 配置HTTP客户端，使用分块传输编码
     http->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
     http->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
-    if (!explain_token_.empty()) {
-        http->SetHeader("Authorization", "Bearer " + explain_token_);
+    if (!token.empty()) {
+        http->SetHeader("Authorization", "Bearer " + token);
     }
     http->SetHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
     http->SetHeader("Transfer-Encoding", "chunked");
-    if (!http->Open("POST", explain_url_)) {
-        ESP_LOGE(TAG, "Failed to connect to explain URL");
+    if (!http->Open("POST", url)) {
+        ESP_LOGE(TAG, "Failed to connect to bridge URL: %s", url.c_str());
         // Clear the queue
         encoder_thread_.join();
         JpegChunk chunk;
@@ -1095,20 +1229,19 @@ std::string StackChanCamera::Explain(const std::string& question)
             }
         }
         vQueueDelete(jpeg_queue);
-        throw std::runtime_error("Failed to connect to explain URL");
+        throw std::runtime_error("Failed to connect to bridge URL");
     }
 
-    {
-        // 第一块：question字段
-        std::string question_field;
-        question_field += "--" + boundary + "\r\n";
-        question_field += "Content-Disposition: form-data; name=\"question\"\r\n";
-        question_field += "\r\n";
-        question_field += question + "\r\n";
-        http->Write(question_field.c_str(), question_field.size());
+    // Form fields (e.g. {"question", text} or {"name", text}) emitted before the file part.
+    for (const auto& field : extra_fields) {
+        std::string body;
+        body += "--" + boundary + "\r\n";
+        body += "Content-Disposition: form-data; name=\"" + field.first + "\"\r\n";
+        body += "\r\n";
+        body += field.second + "\r\n";
+        http->Write(body.c_str(), body.size());
     }
     {
-        // 第二块：文件字段头部
         std::string file_header;
         file_header += "--" + boundary + "\r\n";
         file_header += "Content-Disposition: form-data; name=\"file\"; filename=\"camera.jpg\"\r\n";
@@ -1117,7 +1250,6 @@ std::string StackChanCamera::Explain(const std::string& question)
         http->Write(file_header.c_str(), file_header.size());
     }
 
-    // 第三块：JPEG数据
     size_t total_sent   = 0;
     bool saw_terminator = false;
     while (true) {
@@ -1154,8 +1286,9 @@ std::string StackChanCamera::Explain(const std::string& question)
     http->Write("", 0);
 
     if (http->GetStatusCode() != 200) {
-        ESP_LOGE(TAG, "Failed to upload photo, status code: %d", http->GetStatusCode());
-        throw std::runtime_error("Failed to upload photo");
+        ESP_LOGE(TAG, "Bridge upload failed, status=%d url=%s",
+                 http->GetStatusCode(), url.c_str());
+        throw std::runtime_error("Failed to upload to bridge");
     }
 
     std::string result = http->ReadAll();
@@ -1163,7 +1296,109 @@ std::string StackChanCamera::Explain(const std::string& question)
 
     // Get remain task stack size
     size_t remain_stack_size = uxTaskGetStackHighWaterMark(nullptr);
-    ESP_LOGI(TAG, "Explain image size=%d bytes, compressed size=%d, remain stack size=%d, question=%s\n%s",
-             (int)frame_.len, (int)total_sent, (int)remain_stack_size, question.c_str(), result.c_str());
+    ESP_LOGI(TAG, "StreamJpegToBridge url=%s frame=%d compressed=%d stack=%d\n%s",
+             url.c_str(), (int)frame_.len, (int)total_sent,
+             (int)remain_stack_size, result.c_str());
     return result;
+}
+
+std::string StackChanCamera::DeriveFaceUrl(const std::string& verb) const
+{
+    // explain_url_ is configured once at startup as ".../api/vision/explain".
+    // Swap the suffix to derive ".../api/face/<verb>".
+    static const std::string kSuffix = "/api/vision/explain";
+    if (explain_url_.size() < kSuffix.size() ||
+        explain_url_.compare(explain_url_.size() - kSuffix.size(),
+                             kSuffix.size(), kSuffix) != 0) {
+        ESP_LOGW(TAG, "explain_url_ does not end in %s — cannot derive face URL",
+                 kSuffix.c_str());
+        return std::string();
+    }
+    return explain_url_.substr(0, explain_url_.size() - kSuffix.size())
+           + "/api/face/" + verb;
+}
+
+std::string StackChanCamera::SimpleBridgeRequest(
+    const std::string& method, const std::string& url,
+    const std::string& content_type, const std::string& body)
+{
+    if (url.empty()) {
+        throw std::runtime_error("Bridge URL is not set");
+    }
+    auto network = Board::GetInstance().GetNetwork();
+    auto http    = network->CreateHttp(3);
+
+    http->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
+    http->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
+    if (!explain_token_.empty()) {
+        http->SetHeader("Authorization", "Bearer " + explain_token_);
+    }
+    if (!content_type.empty()) {
+        http->SetHeader("Content-Type", content_type);
+    }
+    if (!body.empty()) {
+        std::string body_copy = body;
+        http->SetContent(std::move(body_copy));
+    }
+    if (!http->Open(method, url)) {
+        ESP_LOGE(TAG, "Failed to open bridge URL: %s", url.c_str());
+        throw std::runtime_error("Failed to open bridge URL");
+    }
+
+    int status         = http->GetStatusCode();
+    std::string result = http->ReadAll();
+    http->Close();
+
+    if (status != 200) {
+        ESP_LOGE(TAG, "Bridge request failed, status=%d url=%s body=%s",
+                 status, url.c_str(), result.c_str());
+        throw std::runtime_error("Bridge request failed");
+    }
+    ESP_LOGI(TAG, "SimpleBridgeRequest %s %s -> %s",
+             method.c_str(), url.c_str(), result.c_str());
+    return result;
+}
+
+std::string StackChanCamera::EnrollFace(const std::string& name)
+{
+    std::string url = DeriveFaceUrl("enroll");
+    if (url.empty()) {
+        throw std::runtime_error("face URL not configured");
+    }
+    return StreamJpegToBridge(url, explain_token_, {{"name", name}});
+}
+
+std::string StackChanCamera::RecognizeFace()
+{
+    std::string url = DeriveFaceUrl("recognize");
+    if (url.empty()) {
+        throw std::runtime_error("face URL not configured");
+    }
+    return StreamJpegToBridge(url, explain_token_, {});
+}
+
+std::string StackChanCamera::ForgetFace(const std::string& name)
+{
+    std::string url = DeriveFaceUrl("forget");
+    if (url.empty()) {
+        throw std::runtime_error("face URL not configured");
+    }
+    // JSON body matches bridge contract: {"name": "..."} or {"name": "*"} for wipe-all.
+    // Names validated upstream; here only escape " and \.
+    std::string escaped;
+    for (char c : name) {
+        if (c == '"' || c == '\\') escaped.push_back('\\');
+        escaped.push_back(c);
+    }
+    std::string body = "{\"name\":\"" + escaped + "\"}";
+    return SimpleBridgeRequest("POST", url, "application/json", body);
+}
+
+std::string StackChanCamera::ListFaces()
+{
+    std::string url = DeriveFaceUrl("list");
+    if (url.empty()) {
+        throw std::runtime_error("face URL not configured");
+    }
+    return SimpleBridgeRequest("GET", url, "", "");
 }

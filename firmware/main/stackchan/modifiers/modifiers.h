@@ -13,3 +13,5 @@
 #include "idle_expression.h"
 #include "dance.h"
 #include "imu.h"
+#include "thinking.h"
+#include "face_tracking.h"
