@@ -8,16 +8,23 @@ CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_FLASH_NONE_ASSETS=y
+CONFIG_STACKCHAN_SD_UI_ASSETS=y
+CONFIG_STACKCHAN_SD_MOUNT_PATH="/sdcard"
+CONFIG_STACKCHAN_SD_ASSETS_SUBPATH="assets"
 CONFIG_STACKCHAN_LITTLEFS_UI_ASSETS=y
 CONFIG_STACKCHAN_LITTLEFS_PARTITION_LABEL="userdata"
 CONFIG_STACKCHAN_LITTLEFS_MOUNT_PATH="/launcherfs"
 CONFIG_STACKCHAN_LITTLEFS_ASSETS_SUBPATH="assets"
 CONFIG_STACKCHAN_LITTLEFS_MOUNT_READ_ONLY=y
-CONFIG_HUMAN_FACE_DETECT_MODEL_IN_FLASH_PARTITION=y
+# Face models: same SD tree as launcher UI — /sdcard/assets/models/s3/*.espdl
+# (copy from managed_components/espressif__human_face_detect/models/s3/)
+# CONFIG_HUMAN_FACE_DETECT_MODEL_IN_FLASH_PARTITION is not set
+CONFIG_HUMAN_FACE_DETECT_MODEL_IN_SDCARD=y
+CONFIG_HUMAN_FACE_DETECT_MODEL_SDCARD_DIR="assets/models/s3"
 # CONFIG_HUMAN_FACE_DETECT_MODEL_IN_FLASH_RODATA is not set
 CONFIG_LANGUAGE_EN_US=y
 CONFIG_BOARD_TYPE_M5STACK_STACK_CHAN=y
-CONFIG_OTA_URL="http://192.168.1.67:8003/xiaozhi/ota/"
+CONFIG_OTA_URL="https://xiaozhi.server.crimi.it/xiaozhi/ota/"
 # Wake word: ESP-SR WakeNet9 model selection.
 # Active: Hi, ESP (best-trained English prebuilt — interim Path A, see docs/wake-word.md).
 # Long-term goal: replace with a microWakeWord "Hey Dotty" TFLite model — see

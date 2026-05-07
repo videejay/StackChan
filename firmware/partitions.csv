@@ -3,8 +3,10 @@
 nvs,      data, nvs,     0x9000,    0x4000,
 otadata,  data, ota,     0xd000,    0x2000,
 phy_init, data, phy,     0xf000,    0x1000,
-ota_0,    app,  ota_0,   0x20000,   0x4f0000,
-ota_1,    app,  ota_1,   ,          0x4f0000,
-userdata, data, littlefs,  0xA00000,  4M,
+# App image ~6 MiB: each OTA slot needs headroom (was 0x520000 / ~5.1 MiB, check_sizes failed).
+ota_0,    app,  ota_0,   0x20000,   0x600000,
+ota_1,    app,  ota_1,   ,          0x600000,
+# userdata after ota_1 @ 0xc20000; 3M (was 4M) so dual 6 MiB OTA + tail partitions fit 16 MB flash
+userdata, data, littlefs, ,         3M,
 coredump, data, coredump,,          0x10000,
-human_face_det, data, fat, ,        0x40000,
+# human_face_detect: models loaded from SD (see sdkconfig.defaults), not flash partition

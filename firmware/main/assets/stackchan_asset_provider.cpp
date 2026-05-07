@@ -235,6 +235,9 @@ namespace stackchan_assets {
 
 void early_init_launcher_assets()
 {
+#if CONFIG_STACKCHAN_SD_UI_ASSETS
+    mount_sd_once();
+#endif
 #if CONFIG_STACKCHAN_LITTLEFS_UI_ASSETS
     mount_lfs_once();
 #endif
