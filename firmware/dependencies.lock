@@ -40,7 +40,7 @@ dependencies:
       type: service
     version: 1.0.0
   78/uart-eth-modem:
-    component_hash: 7a33284e4ba22f420191be8021cd4fe3e49f5e50eea1db70370b217a18147d8e
+    component_hash: c74557e75766f5dd7a265a7ed80c68d01a910940600886b416acd206a615b614
     dependencies:
     - name: 78/uart-uhci
       registry_url: https://components.espressif.com
@@ -56,7 +56,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 0.3.4
+    version: 0.3.5
   78/uart-uhci:
     component_hash: 200eb10923cb750dddbee5504a36d7b5eaac611afbf52fb9066dc7130159f696
     dependencies:
@@ -221,7 +221,7 @@ dependencies:
       type: service
     version: 2.3.1
   espressif/esp32-camera:
-    component_hash: ac4228c825b891378bc0806869170d4ebc5d45ba8ebc519b4f8886a56ad2d123
+    component_hash: 2b75f6f0c987fb0e3687ccbd464cd00c163ea8cb05d2470cfb05adf6535bc488
     dependencies:
     - name: espressif/esp_jpeg
       registry_url: https://components.espressif.com
@@ -233,7 +233,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.1.5
+    version: 2.1.6
   espressif/esp_audio_codec:
     component_hash: af4663830bc73eca58febcc34a976d003465e78ed57458aa00a14b231e392ca1
     dependencies:
