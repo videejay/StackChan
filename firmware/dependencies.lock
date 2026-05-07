@@ -964,6 +964,6 @@ direct_dependencies:
 - waveshare/esp_lcd_sh8601
 - waveshare/esp_lcd_touch_cst9217
 - wvirgil123/sscma_client
-manifest_hash: 531df83ab78e70214536c50a493e87233301ba569c487bc2840216e4a9219bd5
+manifest_hash: 29388cf11bcb216a24f6dcaad750751e449936fd42b8a823bfc561321aae0fcf
 target: esp32s3
 version: 2.0.0

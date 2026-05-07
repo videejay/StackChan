@@ -559,3 +559,4 @@ endif()
 
 # StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS — no mmap `assets.bin` flash.
 message(STATUS "StackChan: mmap assets.bin flashing disabled — use embedded + optional LittleFS (userdata)")
+endif()
