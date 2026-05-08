@@ -8,15 +8,22 @@
 // #define CONFIG_EXAMPLE_USE_CERT_BUNDLE 1
 
 #include "ota.h"
+#include "sdkconfig.h"
+#include "stackchan_asset_provider.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "string.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #ifdef CONFIG_EXAMPLE_USE_CERT_BUNDLE
 #include "esp_crt_bundle.h"
 #endif
@@ -187,3 +194,280 @@ void start_ota_update(const char *url, void (*on_progress)(int progress))
         ESP_LOGE(TAG, "Firmware upgrade failed");
     }
 }
+
+#if CONFIG_STACKCHAN_SD_UI_ASSETS
+#define APP_STORE_SD_APPS_DIR CONFIG_STACKCHAN_SD_MOUNT_PATH "/apps"
+
+static void sanitize_basename(const char *in, char *out, size_t out_sz)
+{
+    size_t j = 0;
+    if (in == NULL || out_sz < 4) {
+        if (out_sz) {
+            strncpy(out, "app", out_sz - 1);
+            out[out_sz - 1] = '\0';
+        }
+        return;
+    }
+    for (size_t i = 0; in[i] != '\0' && j + 1 < out_sz; ++i) {
+        unsigned char c = (unsigned char)in[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+            out[j++] = (char)c;
+        } else if (j > 0 && out[j - 1] != '_') {
+            out[j++] = '_';
+        }
+    }
+    if (j == 0) {
+        strncpy(out, "app", out_sz - 1);
+        out[out_sz - 1] = '\0';
+    } else {
+        out[j] = '\0';
+    }
+    if (strlen(out) > 40) {
+        out[40] = '\0';
+    }
+}
+
+static void basename_from_url(const char *url, char *out, size_t out_sz)
+{
+    const char *p = strrchr(url, '/');
+    p = p ? p + 1 : url;
+    const char *q = strchr(p, '?');
+    size_t len = q ? (size_t)(q - p) : strlen(p);
+    if (len == 0 || len >= out_sz) {
+        sanitize_basename("firmware", out, out_sz);
+        return;
+    }
+    memcpy(out, p, len);
+    out[len] = '\0';
+    sanitize_basename(out, out, out_sz);
+}
+
+static esp_err_t http_download_to_file(const char *url, const char *filepath, void (*on_progress)(int progress))
+{
+    bool use_ssl = (strncmp(url, "https://", 8) == 0);
+    esp_http_client_config_t cfg = {
+        .url = url,
+        .event_handler = _http_event_handler,
+        .keep_alive_enable = true,
+        .timeout_ms = 120000,
+        .transport_type = use_ssl ? HTTP_TRANSPORT_OVER_SSL : HTTP_TRANSPORT_OVER_TCP,
+#ifdef CONFIG_EXAMPLE_USE_CERT_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#else
+        .cert_pem = use_ssl ? (char *)server_cert_pem_start : NULL,
+#endif
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (client == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        esp_http_client_cleanup(client);
+        return err;
+    }
+
+    if (esp_http_client_fetch_headers(client) < 0) {
+        ESP_LOGE(TAG, "fetch_headers failed");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    int status = esp_http_client_get_status_code(client);
+    if (status < 200 || status >= 300) {
+        ESP_LOGE(TAG, "HTTP status %d", status);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    int64_t content_len = esp_http_client_get_content_length(client);
+    FILE *f = fopen(filepath, "wb");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "fopen %s failed", filepath);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    uint8_t buf[4096];
+    int64_t read_total = 0;
+    int last_pct = -1;
+
+    while (1) {
+        int r = esp_http_client_read(client, (char *)buf, sizeof(buf));
+        if (r < 0) {
+            err = ESP_FAIL;
+            break;
+        }
+        if (r == 0) {
+            err = ESP_OK;
+            break;
+        }
+        if (fwrite(buf, 1, (size_t)r, f) != (size_t)r) {
+            err = ESP_FAIL;
+            break;
+        }
+        read_total += r;
+        if (on_progress && content_len > 0) {
+            int pct = (int)((read_total * 45) / content_len);
+            if (pct > 45) {
+                pct = 45;
+            }
+            if (pct != last_pct) {
+                last_pct = pct;
+                on_progress(pct);
+            }
+        }
+    }
+
+    fclose(f);
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+
+    if (err != ESP_OK) {
+        unlink(filepath);
+    } else if (on_progress && content_len <= 0) {
+        on_progress(45);
+    }
+
+    return err;
+}
+
+static esp_err_t ota_flash_from_file(const char *filepath, void (*on_progress)(int progress))
+{
+    struct stat st;
+    if (stat(filepath, &st) != 0 || st.st_size <= 0) {
+        ESP_LOGE(TAG, "invalid firmware file %s", filepath);
+        return ESP_FAIL;
+    }
+
+    const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
+    if (part == NULL) {
+        ESP_LOGE(TAG, "no OTA partition");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_ota_handle_t ota_handle = 0;
+    esp_err_t err = esp_ota_begin(part, (size_t)st.st_size, &ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    FILE *f = fopen(filepath, "rb");
+    if (f == NULL) {
+        esp_ota_abort(ota_handle);
+        return ESP_FAIL;
+    }
+
+    uint8_t buf[4096];
+    size_t written = 0;
+    int last_pct = -1;
+
+    while (1) {
+        size_t r = fread(buf, 1, sizeof(buf), f);
+        if (r == 0) {
+            if (ferror(f)) {
+                err = ESP_FAIL;
+            }
+            break;
+        }
+        err = esp_ota_write(ota_handle, buf, r);
+        if (err != ESP_OK) {
+            break;
+        }
+        written += r;
+        if (on_progress) {
+            int pct = 45 + (int)((written * 55) / (size_t)st.st_size);
+            if (pct > 99) {
+                pct = 99;
+            }
+            if (pct != last_pct) {
+                last_pct = pct;
+                on_progress(pct);
+            }
+        }
+    }
+
+    fclose(f);
+
+    if (err != ESP_OK) {
+        esp_ota_abort(ota_handle);
+        return err;
+    }
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = esp_ota_set_boot_partition(part);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (on_progress) {
+        on_progress(100);
+    }
+    return ESP_OK;
+}
+
+void start_ota_update_cached_on_sd(const char *url, const char *storage_basename,
+                                   void (*on_progress)(int progress))
+{
+    stackchan_ensure_sd_mounted();
+
+    char slug[48];
+    if (storage_basename != NULL && storage_basename[0] != '\0') {
+        sanitize_basename(storage_basename, slug, sizeof(slug));
+    } else {
+        basename_from_url(url, slug, sizeof(slug));
+    }
+
+    if (mkdir(APP_STORE_SD_APPS_DIR, 0755) != 0) {
+        struct stat st;
+        if (stat(APP_STORE_SD_APPS_DIR, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            ESP_LOGW(TAG, "SD apps dir missing (%s) - falling back to direct HTTPS OTA", APP_STORE_SD_APPS_DIR);
+            start_ota_update(url, on_progress);
+            return;
+        }
+    }
+
+    char filepath[192];
+    int n = snprintf(filepath, sizeof(filepath), "%s/%s.bin", APP_STORE_SD_APPS_DIR, slug);
+    if (n <= 0 || n >= (int)sizeof(filepath)) {
+        ESP_LOGE(TAG, "firmware path too long");
+        return;
+    }
+
+    ESP_LOGI(TAG, "App store: downloading to %s", filepath);
+    esp_err_t err = http_download_to_file(url, filepath, on_progress);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "download failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI(TAG, "App store: flashing from SD cache");
+    err = ota_flash_from_file(filepath, on_progress);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA from file failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI(TAG, "OTA from SD cache OK, rebooting...");
+    esp_restart();
+}
+#else /* !CONFIG_STACKCHAN_SD_UI_ASSETS */
+
+void start_ota_update_cached_on_sd(const char *url, const char *storage_basename,
+                                   void (*on_progress)(int progress))
+{
+    (void)storage_basename;
+    start_ota_update(url, on_progress);
+}
+
+#endif /* CONFIG_STACKCHAN_SD_UI_ASSETS */

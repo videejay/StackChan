@@ -7,6 +7,7 @@
 #include "utils/ota/ota.h"
 #include <mooncake_log.h>
 #include <memory>
+#include <string>
 #include <board.h>
 #include <cJSON.h>
 
@@ -116,7 +117,14 @@ static void ota_callback(int progress)
 
 void Hal::launchApp(std::string_view url, std::function<void(int)> onProgress)
 {
+    launchApp(url, onProgress, std::string_view{});
+}
+
+void Hal::launchApp(std::string_view url, std::function<void(int)> onProgress, std::string_view storageBasename)
+{
     mclog::tagInfo(_tag, "launching app from url: {}", url);
+    std::string url_s(url);
+    std::string base_s(storageBasename);
     _on_progress = onProgress;
-    start_ota_update(url.data(), ota_callback);
+    start_ota_update_cached_on_sd(url_s.c_str(), base_s.empty() ? nullptr : base_s.c_str(), ota_callback);
 }

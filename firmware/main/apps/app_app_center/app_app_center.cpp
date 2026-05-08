@@ -74,7 +74,7 @@ void AppAppCenter::onRunning()
             if (_app_install_page) {
                 _app_install_page->setProgress(percent);
             }
-        });
+        }, _app_list[_selected_index].name);
     }
 
     LvglLockGuard lock;

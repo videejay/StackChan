@@ -565,6 +565,6 @@ else()
     message(STATUS "Assets partition not found, using v1 partition table")
 endif()
 
-# StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS — no mmap `assets.bin` flash.
-message(STATUS "StackChan: mmap assets.bin flashing disabled — use embedded + optional LittleFS (userdata)")
+# StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS ï¿½ no mmap `assets.bin` flash.
+message(STATUS "StackChan: mmap assets.bin flashing disabled ï¿½ use embedded + optional LittleFS (userdata)")
 endif()

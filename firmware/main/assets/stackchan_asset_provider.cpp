@@ -316,3 +316,8 @@ bool get_launcher_ui_asset_bytes(std::string_view name, const uint8_t** out_ptr,
 }
 
 }  // namespace stackchan_assets
+
+extern "C" void stackchan_ensure_sd_mounted(void)
+{
+    stackchan_assets::early_init_launcher_assets();
+}

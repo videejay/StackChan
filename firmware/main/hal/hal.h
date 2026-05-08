@@ -269,6 +269,7 @@ public:
     /* -------------------------------- App center ------------------------------- */
     app_center::AppInfoList_t fetchAppList();
     void launchApp(std::string_view url, std::function<void(int)> onProgress);
+    void launchApp(std::string_view url, std::function<void(int)> onProgress, std::string_view storageBasename);
 
     /* --------------------------------- EzData --------------------------------- */
     void startEzDataService(std::function<void(std::string_view)> onStartLog);
