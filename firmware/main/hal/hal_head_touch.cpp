@@ -158,5 +158,13 @@ void Hal::head_touch_init()
     si12t_init(&si12t_cfg, &si12t);
     si12t_setup(si12t, SI12T_TYPE_LOW, SI12T_SENSITIVITY_LEVEL_3);
 
-    xTaskCreateWithCaps(_head_touch_update_task, "headtouch", 1024 * 6, si12t, 5, NULL, MALLOC_CAP_SPIRAM);
+    BaseType_t task_ok = pdFAIL;
+#if CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+    task_ok = xTaskCreateWithCaps(_head_touch_update_task, "headtouch", 1024 * 6, si12t, 5, NULL, MALLOC_CAP_SPIRAM);
+#else
+    task_ok = xTaskCreate(_head_touch_update_task, "headtouch", 1024 * 6, si12t, 5, NULL);
+#endif
+    if (task_ok != pdPASS) {
+        mclog::tagError(_tag, "failed to create head touch task");
+    }
 }

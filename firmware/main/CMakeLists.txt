@@ -22,6 +22,15 @@ file(GLOB_RECURSE STACK_CHAN_SOURCES
     "stackchan/*.c"
     "stackchan/*.cc"
     "stackchan/*.cpp"
+    "stackchan/avatar/*.c"
+    "stackchan/avatar/*.cc"
+    "stackchan/avatar/*.cpp"
+    "stackchan/avatar/**/*.c"
+    "stackchan/avatar/**/*.cc"
+    "stackchan/avatar/**/*.cpp"
+    "stackchan/face/*.c"
+    "stackchan/face/*.cc"
+    "stackchan/face/*.cpp"
 )
 set(STACK_CHAN_INCLUDE_DIRS 
     "."
@@ -347,6 +356,7 @@ idf_component_register(SRCS ${SOURCES}
                         mooncake_log
                         smooth_ui_toolkit
                         littlefs
+                        esp_lvgl_port
                     )
 
 # Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
@@ -565,6 +575,6 @@ else()
     message(STATUS "Assets partition not found, using v1 partition table")
 endif()
 
-# StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS � no mmap `assets.bin` flash.
-message(STATUS "StackChan: mmap assets.bin flashing disabled � use embedded + optional LittleFS (userdata)")
+# StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS ? no mmap `assets.bin` flash.
+message(STATUS "StackChan: mmap assets.bin flashing disabled ? use embedded + optional LittleFS (userdata)")
 endif()

@@ -9,6 +9,7 @@
 #include <mooncake_log.h>
 #include <assets/assets.h>
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 
 using namespace mooncake;
 using namespace stackchan;
@@ -37,10 +38,7 @@ void AppEzdata::onOpen()
     {
         LvglLockGuard lock;
 
-        // Create default avatar
-        auto avatar = std::make_unique<avatar::DefaultAvatar>();
-        avatar->init(lv_screen_active());
-        GetStackChan().attachAvatar(std::move(avatar));
+        GetStackChan().attachAvatar(avatar::createConfiguredAvatar(lv_screen_active()));
 
         // Create loading page
         _loading_page = std::make_unique<view::LoadingPage>(0x60A5FA, 0x072448);

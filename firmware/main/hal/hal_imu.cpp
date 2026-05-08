@@ -53,5 +53,13 @@ void Hal::imu_init()
     }
     mclog::tagInfo(_tag, "BMI270 init ok");
 
-    xTaskCreateWithCaps(_imu_task, "imu", 4096, NULL, 5, NULL, MALLOC_CAP_SPIRAM);
+    BaseType_t task_ok = pdFAIL;
+#if CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+    task_ok = xTaskCreateWithCaps(_imu_task, "imu", 4096, NULL, 5, NULL, MALLOC_CAP_SPIRAM);
+#else
+    task_ok = xTaskCreate(_imu_task, "imu", 4096, NULL, 5, NULL);
+#endif
+    if (task_ok != pdPASS) {
+        mclog::tagError(_tag, "failed to create imu task");
+    }
 }

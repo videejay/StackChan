@@ -22,11 +22,69 @@
 
 #include <cstdio>
 #include <string>
+#if CONFIG_HUMAN_FACE_DETECT_MODEL_IN_SDCARD
+#include <hal/stackchan_spi3_lvgl_lock.h>
+#include <cerrno>
+#include <cstring>
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 
 #include "human_face_detect.hpp"
 #include "application.h"  // Layer 4: face_recognized perception event
 
 #define TAG "FaceDetector"
+
+#if CONFIG_HUMAN_FACE_DETECT_MODEL_IN_SDCARD
+/** Lists VFS directory entries to serial when face model path is missing (debug). */
+static void log_vfs_dir_entries(const char* path, const char* label, int max_entries)
+{
+    if (!path || !path[0] || max_entries <= 0) {
+        return;
+    }
+    DIR* dir = opendir(path);
+    if (!dir) {
+        ESP_LOGW(TAG, "SD debug [%s]: opendir(\"%s\") failed errno=%d", label, path, errno);
+        return;
+    }
+    ESP_LOGW(TAG, "SD debug [%s] listing \"%s\":", label, path);
+    int shown = 0;
+    int extra = 0;
+    struct dirent* ent = nullptr;
+    while ((ent = readdir(dir)) != nullptr) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+            continue;
+        }
+        if (shown < max_entries) {
+            ESP_LOGW(TAG, "  %s", ent->d_name);
+            shown++;
+        } else {
+            extra++;
+        }
+    }
+    closedir(dir);
+    if (shown == 0) {
+        ESP_LOGW(TAG, "  (no entries)");
+    }
+    if (extra > 0) {
+        ESP_LOGW(TAG, "  ... %d more (truncated, max=%d)", extra, max_entries);
+    }
+}
+
+static void log_stat_one_path(const char* path, const char* what)
+{
+    if (!path || !path[0]) {
+        return;
+    }
+    struct stat st {};
+    if (stat(path, &st) == 0) {
+        const char* kind = S_ISDIR(st.st_mode) ? "dir" : (S_ISREG(st.st_mode) ? "file" : "other");
+        ESP_LOGW(TAG, "SD debug stat [%s] \"%s\": ok (%s, size=%ld)", what, path, kind, (long)st.st_size);
+    } else {
+        ESP_LOGW(TAG, "SD debug stat [%s] \"%s\": errno=%d (%s)", what, path, errno, strerror(errno));
+    }
+}
+#endif
 
 static constexpr int FRAME_W = 320;
 static constexpr int FRAME_H = 240;
@@ -241,6 +299,9 @@ void FaceDetector::processFrame()
     static bool s_checked_sd_models = false;
     static bool s_have_sd_models = false;
     if (!s_checked_sd_models) {
+        // SPI3_HOST is shared with the LCD (LVGL flush). Hold the LVGL bus lock
+        // for all SD VFS ops + logs so we never overlap SDSPI with panel SPI.
+        StackchanSpi3LvglLockGuard spi3_probe_lock("face_sd_model_probe");
         s_checked_sd_models = true;
 #if defined(CONFIG_STACKCHAN_SD_UI_ASSETS) && defined(CONFIG_STACKCHAN_SD_MOUNT_PATH)
         const char* sd_root = CONFIG_STACKCHAN_SD_MOUNT_PATH;
@@ -251,6 +312,12 @@ void FaceDetector::processFrame()
         const char* sd_root = "/sdcard";
 #endif
 #endif
+        char models_dir[192];
+        const int mlen = snprintf(models_dir,
+                                  sizeof(models_dir),
+                                  "%s/%s",
+                                  sd_root,
+                                  CONFIG_HUMAN_FACE_DETECT_MODEL_SDCARD_DIR);
         char path[192];
         int plen = snprintf(path,
                             sizeof(path),
@@ -258,11 +325,14 @@ void FaceDetector::processFrame()
                             sd_root,
                             CONFIG_HUMAN_FACE_DETECT_MODEL_SDCARD_DIR,
                             "human_face_detect_msr_s8_v1.espdl");
+        int open_errno = 0;
         if (plen > 0 && plen < (int)sizeof(path)) {
             FILE* f = fopen(path, "rb");
             if (f) {
                 fclose(f);
                 s_have_sd_models = true;
+            } else {
+                open_errno = errno;
             }
         }
         if (!s_have_sd_models) {
@@ -272,6 +342,19 @@ void FaceDetector::processFrame()
                      path,
                      sd_root,
                      CONFIG_HUMAN_FACE_DETECT_MODEL_SDCARD_DIR);
+            if (open_errno != 0) {
+                ESP_LOGW(TAG, "SD debug: fopen(\"%s\") failed errno=%d (%s)", path, open_errno, strerror(open_errno));
+            }
+            // Prove what the firmware actually sees: concrete S3 directory + entries first (narrow log).
+            if (mlen > 0 && mlen < (int)sizeof(models_dir)) {
+                ESP_LOGW(TAG, "SD debug: required S3 model directory (full path): \"%s\"", models_dir);
+                log_stat_one_path(path, "MSR .espdl file");
+                log_stat_one_path(models_dir, "S3 models directory");
+                log_vfs_dir_entries(models_dir, "S3 models dir listing", 64);
+            } else {
+                ESP_LOGW(TAG, "SD debug: models_dir path snprintf failed (mlen=%d)", mlen);
+            }
+            log_vfs_dir_entries(sd_root, "SD mount root (first 24)", 24);
         }
     }
     if (!s_have_sd_models) {
@@ -299,7 +382,15 @@ void FaceDetector::processFrame()
         .height   = (uint16_t)frame_h,
         .pix_type = pix_type,
     };
+#if CONFIG_HUMAN_FACE_DETECT_MODEL_IN_SDCARD
+    // SD-backed .espdl reads SPI3 with the LCD; serialize with LVGL for this call only.
+    auto& results = [&]() -> decltype(auto) {
+        StackchanSpi3LvglLockGuard spi3_infer_lock("face_infer_sd_spi3");
+        return detector.run(img);
+    }();
+#else
     auto& results = detector.run(img);
+#endif
     arbiter.releaseForDetection();
 
     auto& result = GetFaceDetectionResult();

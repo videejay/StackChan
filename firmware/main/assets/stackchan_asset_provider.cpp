@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include <esp_log.h>
 #include <mooncake_log.h>
 
 #ifdef CONFIG_STACKCHAN_SD_UI_ASSETS
@@ -36,6 +37,7 @@ static constexpr const char* TAG_LFS = "stackchan_lfs";
 #ifdef CONFIG_STACKCHAN_SD_UI_ASSETS
 static constexpr const char* TAG_SD = "stackchan_sd";
 #endif
+static constexpr const char* TAG_ASSET_POLICY = "stackchan_asset_policy";
 
 std::unordered_map<std::string, std::vector<uint8_t>> s_fs_cache;
 std::mutex s_cache_mtx;
@@ -235,6 +237,8 @@ namespace stackchan_assets {
 
 void early_init_launcher_assets()
 {
+    ESP_LOGI(TAG_ASSET_POLICY,
+             "Asset lookup order (ecosystem-wide, keep this order for all apps): Embedded -> LittleFS -> SD");
 #if CONFIG_STACKCHAN_SD_UI_ASSETS
     mount_sd_once();
 #endif
@@ -251,30 +255,6 @@ bool get_launcher_ui_asset_bytes(std::string_view name, const uint8_t** out_ptr,
     }
 
     const std::string key(name);
-
-#ifdef CONFIG_STACKCHAN_SD_UI_ASSETS
-    {
-        std::lock_guard<std::mutex> guard(s_cache_mtx);
-
-        mount_sd_once();
-
-        const std::string sd_cache_key = make_source_cache_key("sd", key);
-        auto it = s_fs_cache.find(sd_cache_key);
-        if (it == s_fs_cache.end()) {
-            read_sd_into_cache_locked(key);
-            it = s_fs_cache.find(sd_cache_key);
-        }
-
-        if (it != s_fs_cache.end()) {
-            *out_ptr = it->second.data();
-            *out_len = it->second.size();
-            if (out_src) {
-                *out_src = LauncherAssetSource::SDCard;
-            }
-            return true;
-        }
-    }
-#endif
 
 #if CONFIG_STACKCHAN_LITTLEFS_UI_ASSETS
     {
@@ -294,6 +274,30 @@ bool get_launcher_ui_asset_bytes(std::string_view name, const uint8_t** out_ptr,
             *out_len = it->second.size();
             if (out_src) {
                 *out_src = LauncherAssetSource::LittleFS;
+            }
+            return true;
+        }
+    }
+#endif
+
+#ifdef CONFIG_STACKCHAN_SD_UI_ASSETS
+    {
+        std::lock_guard<std::mutex> guard(s_cache_mtx);
+
+        mount_sd_once();
+
+        const std::string sd_cache_key = make_source_cache_key("sd", key);
+        auto it = s_fs_cache.find(sd_cache_key);
+        if (it == s_fs_cache.end()) {
+            read_sd_into_cache_locked(key);
+            it = s_fs_cache.find(sd_cache_key);
+        }
+
+        if (it != s_fs_cache.end()) {
+            *out_ptr = it->second.data();
+            *out_len = it->second.size();
+            if (out_src) {
+                *out_src = LauncherAssetSource::SDCard;
             }
             return true;
         }
