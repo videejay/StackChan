@@ -120,7 +120,8 @@ StackChanAvatarDisplay::StackChanAvatarDisplay(esp_lcd_panel_io_handle_t panel_i
 
     ESP_LOGI(TAG, "Initialize LVGL port");
     lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
-    port_cfg.task_priority   = 20;
+    // port_cfg.task_priority   = 20;
+    port_cfg.task_priority = 3;
 #if CONFIG_SOC_CPU_CORES_NUM > 1
     port_cfg.task_affinity = 1;
 #endif
@@ -271,6 +272,9 @@ void StackChanAvatarDisplay::SetupUI()
 
     // GetHAL().startStackChanAutoUpdate(24);
 
+    auto config        = hal_bridge::get_xiaozhi_config();
+    idle_motion_level_ = config.idleRandomMovementLevel;
+
     ESP_LOGI(TAG, "Avatar created and started");
 }
 
@@ -284,6 +288,27 @@ void StackChanAvatarDisplay::LvglLock()
 void StackChanAvatarDisplay::LvglUnlock()
 {
     Unlock();
+}
+
+void StackChanAvatarDisplay::CreateIdleMotionModifier()
+{
+    auto& stackchan = GetStackChan();
+
+    switch (idle_motion_level_) {
+        case 0:
+            idle_motion_modifier_id_ = -1;
+            return;
+        case 1:
+            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>(8000, 12000));
+            return;
+        case 3:
+            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>(2000, 4000));
+            return;
+        case 2:
+        default:
+            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>());
+            return;
+    }
 }
 
 void StackChanAvatarDisplay::SetEmotion(const char* emotion)
@@ -435,9 +460,14 @@ void StackChanAvatarDisplay::SetTheme(Theme* theme)
 
 #include <hal/board/hal_bridge.h>
 static bool _is_xiaozhi_ready = false;
+static bool _is_xiaozhi_idle  = false;
 bool hal_bridge::is_xiaozhi_ready()
 {
     return _is_xiaozhi_ready;
+}
+bool hal_bridge::is_xiaozhi_idle()
+{
+    return _is_xiaozhi_idle;
 }
 
 void StackChanAvatarDisplay::SetStatus(const char* status)
@@ -486,7 +516,7 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
 
     } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
         if (speaking_modifier_id_ < 0) {
-            speaking_modifier_id_ = stackchan.addModifier(std::make_unique<SpeakingModifier>());
+            speaking_modifier_id_ = stackchan.addModifier(std::make_unique<SpeakingModifier>(0, 180, false));
         }
 
         GetHAL().setRgbColor(0, 0, 0, 50);
@@ -499,9 +529,13 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
         // Start idle motion
         ESP_LOGW(TAG, "Start idle motion");
         if (idle_motion_modifier_id_ < 0) {
-            idle_motion_modifier_id_     = stackchan.addModifier(std::make_unique<IdleMotionModifier>());
+            if (idle_motion_level_ > 0) {
+                CreateIdleMotionModifier();
+            }
             idle_expression_modifier_id_ = stackchan.addModifier(std::make_unique<IdleExpressionModifier>());
         }
+
+        _is_xiaozhi_idle = true;
     } else {
         // Stop idle motion
         ESP_LOGW(TAG, "Stop idle motion");
@@ -517,6 +551,8 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
         //     motion.pitchServo().moveWithSpeed(200, 350);
         //     motion.yawServo().moveWithSpeed(0, 350);
         // }
+
+        _is_xiaozhi_idle = false;
     }
 
     // Clear sleep state
