@@ -115,9 +115,10 @@ set(EMOTE_RESOLUTION "320_240")
 # Set default assets if the board uses partition table V2
 if(CONFIG_BOARD_TYPE_M5STACK_STACK_CHAN)
     set(BOARD_TYPE "m5stack-stack-chan")
-    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
-    set(BUILTIN_ICON_FONT font_awesome_20_4)
-    set(DEFAULT_EMOJI_COLLECTION twemoji_64)
+    # Smaller fonts/emoji so generated assets fit Launcher's spiffs slot (~2.81 MB @ 0xD00000)
+    set(BUILTIN_TEXT_FONT font_puhui_basic_16_4)
+    set(BUILTIN_ICON_FONT font_awesome_16_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
 endif()
 
 if(MANUFACTURER)
