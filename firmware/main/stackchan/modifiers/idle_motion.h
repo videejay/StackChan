@@ -19,27 +19,75 @@ namespace stackchan {
  */
 class IdleMotionModifier : public Modifier {
 public:
+    static constexpr const char* kName = "idle_motion";
+
+    // Phase 2 — overlay interval used while a face is locked. Longer than
+    // the idle range (4–8 s) so the head only drifts every 12–24 s instead
+    // of every few seconds; preserves the "Dotty is paying attention to
+    // you" feel while still giving the gaze occasional life.
+    static constexpr uint32_t kTrackingOverlayMinMs = 12000;
+    static constexpr uint32_t kTrackingOverlayMaxMs = 24000;
+    // Phase 2 — Return-to-center action only fires after the face has been
+    // continuously locked for this long. Below the threshold we stick to
+    // small-observation drifts only.
+    static constexpr uint32_t kReturnToCenterSteadyMs = 5000;
+
     IdleMotionModifier(uint32_t interval_min = 4000, uint32_t interval_max = 8000)
         : _interval_min(interval_min), _interval_max(interval_max)
     {
         _next_tick = GetHAL().millis() + 1000;  // 启动 1 秒后开始第一次动作
     }
 
-    void pause()
+    const char* name() const override
     {
-        _paused = true;
+        return kName;
     }
-    void resume()
+
+    // Phase 2 — replace pause/resume with a tracking-mode switch.
+    // tracking_mode=true: head is currently locked on a face; emit reduced,
+    // longer-interval drift actions so Dotty stays "alive" without snapping
+    // off the face. tracking_mode=false: full idle motion (the original
+    // four-action mix). Idempotent — repeated identical calls are no-ops.
+    void setTrackingMode(bool enabled)
     {
-        if (_paused) {
-            _paused    = false;
-            _next_tick = GetHAL().millis() + 500;
+        if (_tracking_mode == enabled) return;
+        _tracking_mode = enabled;
+        uint32_t now   = GetHAL().millis();
+        if (enabled) {
+            _tracking_entered_ms = now;
+            // Schedule first overlay drift one full overlay-interval out so
+            // the head doesn't immediately drift away from the just-acquired
+            // face — let the lock settle first.
+            _next_tick = now + Random::getInstance().getInt(
+                                   _tracking_overlay_min_ms, _tracking_overlay_max_ms);
+        } else {
+            // Exiting tracking mode (face lost / grace expired) — kick the
+            // next idle action soon so the head doesn't sit dead-eyed for
+            // a full 4–8 s.
+            _next_tick = now + 500;
         }
+    }
+
+    // Phase 3 — chat-state-driven tunables. face_tracking pushes these on
+    // each chat-state transition (via FaceTrackingModifier::setChatProfile).
+    // setIntervalRange affects the *tracking-overlay* cadence only — the
+    // full-idle 4–8 s mix stays at constructor defaults so non-locked idle
+    // behaviour is unchanged. setAmplitudeScale multiplies the small-
+    // observation deltas in perform_tracking_overlay (1.0 = Phase 2 default
+    // ±75°/±40°, 0.5 = quarter range).
+    void setIntervalRange(uint32_t min_ms, uint32_t max_ms)
+    {
+        _tracking_overlay_min_ms = min_ms;
+        _tracking_overlay_max_ms = max_ms;
+    }
+    void setAmplitudeScale(float scale)
+    {
+        _amplitude_scale = scale;
     }
 
     void _update(Modifiable& stackchan) override
     {
-        if (_paused || !stackchan.hasAvatar()) return;
+        if (!stackchan.hasAvatar()) return;
 
         uint32_t now = GetHAL().millis();
 
@@ -54,16 +102,67 @@ public:
             return;
         }
 
-        // 执行动作
-        perform_idle_motion(stackchan);
+        // 执行动作 — tracking mode picks the reduced overlay set, idle mode
+        // picks the full four-action mix.
+        if (_tracking_mode) {
+            perform_tracking_overlay(stackchan, now);
+        } else {
+            perform_idle_motion(stackchan);
+        }
 
-        // 算下一次的时间间隔
-        uint32_t delay = Random::getInstance().getInt(_interval_min, _interval_max);
+        // 算下一次的时间间隔 — overlay uses a longer cadence than full idle.
+        // Overlay range is settable via setIntervalRange (Phase 3); idle range
+        // stays at constructor defaults.
+        uint32_t delay = _tracking_mode
+            ? Random::getInstance().getInt(_tracking_overlay_min_ms, _tracking_overlay_max_ms)
+            : Random::getInstance().getInt(_interval_min, _interval_max);
         _next_tick     = now + delay;
         // mclog::info("next idle motion in {} ms", delay);
     }
 
 private:
+    // Phase 2 — reduced action set for "face locked" mode. Drops the
+    // Random look (would snap off the locked face) and Quick glance (too
+    // jarring) branches entirely. Keeps Small observation with halved
+    // ranges (face_tracking will pull the head back on the next detection
+    // tick anyway) and Return-to-center, gated on >5 s of steady lock so
+    // we don't yank away the moment a face is acquired.
+    void perform_tracking_overlay(Modifiable& stackchan, uint32_t now)
+    {
+        auto& motion = stackchan.motion();
+        if (motion.isModifyLocked()) {
+            return;
+        }
+
+        uint32_t steady_ms = now - _tracking_entered_ms;
+        int action         = Random::getInstance().getInt(0, 100);
+
+        // < 80 OR not yet steady: small observation only.
+        // ≥ 80 AND steady: return-to-center.
+        if (action < 80 || steady_ms < kReturnToCenterSteadyMs) {
+            // Halved offset ranges vs idle's Small observation (was ±150° / ±80°),
+            // further scaled by Phase 3's amplitude_scale (1.0 = Phase 2 default).
+            int yaw_range    = static_cast<int>(75 * _amplitude_scale);
+            int pitch_range  = static_cast<int>(40 * _amplitude_scale);
+            // Guard against zero-range getInt(0,0) — Random returns the bound.
+            if (yaw_range   < 1) yaw_range   = 1;
+            if (pitch_range < 1) pitch_range = 1;
+            auto current     = motion.getCurrentAngles();
+            int diff_yaw     = Random::getInstance().getInt(-yaw_range, yaw_range);
+            int diff_pitch   = Random::getInstance().getInt(-pitch_range, pitch_range);
+            int target_yaw   = uitk::clamp(current.x + diff_yaw, -800, 800);
+            int target_pitch = uitk::clamp(current.y + diff_pitch, 0, 600);
+            int speed        = Random::getInstance().getInt(100, 250);
+            motion.moveWithSpeed(target_yaw, target_pitch, speed);
+        } else {
+            // Return-to-center: yaw → 0, gentle pitch shift. Face_tracking
+            // will pull back to the locked face on the next detection tick.
+            int target_pitch = Random::getInstance().getInt(50, 400);
+            int speed        = Random::getInstance().getInt(100, 300);
+            motion.moveWithSpeed(0, target_pitch, speed);
+        }
+    }
+
     void perform_idle_motion(Modifiable& stackchan)
     {
         auto& motion = stackchan.motion();
@@ -115,7 +214,20 @@ private:
     uint32_t _interval_min;
     uint32_t _interval_max;
     uint32_t _next_tick = 0;
-    bool _paused        = false;
+    // Phase 2 — tracking-overlay state. _tracking_mode replaces the old
+    // _paused flag; when true, _update picks perform_tracking_overlay
+    // instead of perform_idle_motion. _tracking_entered_ms is set on each
+    // false→true transition so the overlay can gate Return-to-center on
+    // the face being held steady.
+    bool _tracking_mode           = false;
+    uint32_t _tracking_entered_ms = 0;
+    // Phase 3 — chat-state-driven tunables for the tracking-overlay path.
+    // Defaults match Phase 2's constexpr values; setIntervalRange and
+    // setAmplitudeScale (called by face_tracking on chat-state transitions)
+    // override them per profile.
+    uint32_t _tracking_overlay_min_ms = kTrackingOverlayMinMs;
+    uint32_t _tracking_overlay_max_ms = kTrackingOverlayMaxMs;
+    float    _amplitude_scale         = 1.0f;
 };
 
 }  // namespace stackchan

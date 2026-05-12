@@ -30,6 +30,8 @@ public:
     void setColor(uint32_t hex);
     void setColor(std::string_view hex);
     void setDuration(float durationSec);
+    /** Set one LED immediately (bypasses animation sweep). */
+    void setColorAt(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
     int getLedCount() const
     {
         return _led_count;

@@ -144,9 +144,19 @@ void RoboEyesEye::setEmotion(const Emotion& emotion)
     switch (emotion) {
         case Emotion::Happy:
             Feature::setWeight(78);
+            setSize(0);
             break;
         case Emotion::Sleepy:
             Feature::setWeight(36);
+            setSize(0);
+            break;
+        case Emotion::Surprise:
+            Feature::setWeight(100);
+            setSize(70);
+            break;
+        case Emotion::Love:
+            Feature::setWeight(72);
+            setSize(0);
             break;
         case Emotion::Angry:
         case Emotion::Sad:
@@ -154,6 +164,7 @@ void RoboEyesEye::setEmotion(const Emotion& emotion)
         case Emotion::Neutral:
         default:
             Feature::setWeight(100);
+            setSize(0);
             break;
     }
     applyTargetFromState();
@@ -200,7 +211,8 @@ void RoboEyesEye::applyTargetFromState()
     _target_y = kEyeBaseY + look_y + (kBaseEyeHeight - _target_height) / 2;
 
     _target_top_cover = moodTopCoverHeight();
-    _target_bottom_cover = (_emotion == Emotion::Happy) ? _target_height / 2 + 7 : 0;
+    _target_bottom_cover =
+        (_emotion == Emotion::Happy || _emotion == Emotion::Love) ? _target_height / 2 + 7 : 0;
 }
 
 void RoboEyesEye::render()
@@ -234,6 +246,8 @@ int RoboEyesEye::moodTopCoverHeight() const
             return _target_height / 2;
         case Emotion::Sleepy:
             return _target_height / 3;
+        case Emotion::Surprise:
+            return 0;
         default:
             return 0;
     }
@@ -246,6 +260,9 @@ int RoboEyesEye::moodTopCoverRotation() const
     }
     if (_emotion == Emotion::Sad || _emotion == Emotion::Sleepy) {
         return _is_left_eye ? 150 : -150;
+    }
+    if (_emotion == Emotion::Love) {
+        return _is_left_eye ? 120 : -120;
     }
     return 0;
 }

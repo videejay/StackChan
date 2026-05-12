@@ -7,6 +7,7 @@
 #include <memory>
 #include <mooncake_log.h>
 #include <nvs_flash.h>
+#include <stackchan/privacy/privacy_leds.h>
 
 static std::unique_ptr<Hal> _hal_instance;
 static const std::string_view _tag = "HAL";
@@ -36,6 +37,7 @@ void Hal::init()
     xiaozhi_mcp_init();
     head_touch_init();
     io_expander_init();
+    stackchan::privacy::PrivacyLeds::getInstance().runBootSelfTest();
     rtc_init();
     imu_init();
     servo_init();
@@ -144,22 +146,22 @@ void Hal::xiaozhi_board_init()
 
 static void _stackchan_update_task(void* param)
 {
-    bool is_setup_done = false;
+    bool is_xiaozhi_ready = false;
+    bool is_setup_done    = false;
 
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         tools::update_reminders();
 
         LvglLockGuard lock;
 
-        if (!hal_bridge::is_xiaozhi_idle()) {
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-
         GetStackChan().update();
 
-        if (!hal_bridge::is_xiaozhi_ready()) {
+        stackchan::privacy::PrivacyLeds::getInstance().update();
+
+        if (!is_xiaozhi_ready) {
+            is_xiaozhi_ready = hal_bridge::is_xiaozhi_ready();
             continue;
         }
 
@@ -197,7 +199,7 @@ void Hal::startXiaozhi()
     });
 
     // Start stackchan update task
-    xTaskCreatePinnedToCore(_stackchan_update_task, "stackchan", 4096, NULL, 3, NULL, 1);
+    xTaskCreatePinnedToCore(_stackchan_update_task, "stackchan", 4096, NULL, 5, NULL, 1);
 
     hal_bridge::start_xiaozhi_app();
 }

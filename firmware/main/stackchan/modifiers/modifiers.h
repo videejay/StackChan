@@ -11,5 +11,7 @@
 #include "head_pet.h"
 #include "idle_motion.h"
 #include "idle_expression.h"
+#include "face_tracking.h"
+#include "thinking.h"
 #include "dance.h"
 #include "imu.h"

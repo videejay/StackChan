@@ -7,7 +7,11 @@
 #include <mooncake_log.h>
 #include <mcp_server.h>
 #include <stackchan/stackchan.h>
+#include <stackchan/privacy/privacy_leds.h>
+#include <hal/board/hal_bridge.h>
 #include <apps/common/common.h>
+#include <board.h>          // Board::GetInstance() — privacy LED step 3
+#include <audio_codec.h>     // AudioCodec::input_enabled() — privacy LED step 3
 
 using namespace stackchan;
 
@@ -92,6 +96,100 @@ void Hal::xiaozhi_mcp_init()
             return true;
         });
 
+    mclog::tagInfo(_tag, "add robot.set_led_multi tool");
+    mcp_server.AddTool(
+        "self.robot.set_led_multi",
+        "Set ONE pixel of the robot's 12-LED ring directly. Index 0-5 = left ring, 6-11 = right ring. "
+        "Bypasses the ring colour animation, so the chosen pixel holds its colour while the rest of the "
+        "ring keeps animating (used for hybrid status indicators, e.g. smart-mode). r/g/b 0-255.",
+        PropertyList({Property("index", kPropertyTypeInteger, 0, 0, 11),
+                      Property("red", kPropertyTypeInteger, 0, 0, 255),
+                      Property("green", kPropertyTypeInteger, 0, 0, 255),
+                      Property("blue", kPropertyTypeInteger, 0, 0, 255)}),
+        [this](const PropertyList& properties) -> ReturnValue {
+            int index = properties["index"].value<int>();
+            int r     = properties["red"].value<int>();
+            int g     = properties["green"].value<int>();
+            int b     = properties["blue"].value<int>();
+
+            if (index < 0 || index > 11) {
+                mclog::tagWarn(_tag, "set_led_multi: index out of range: {}", index);
+                return false;
+            }
+
+            // These indices are hardware-guaranteed privacy indicators (mic/camera state).
+            // The MCP server-side LLM is NOT trusted with overwriting them. PrivacyLeds::update()
+            // re-asserts every tick (~20ms), so a write here would only cause a transient flicker,
+            // but we reject outright to keep the privacy pixels owned by the peripheral-enable
+            // code path (mic_peripheral_guard / camera_peripheral_guard) alone.
+            if (index == privacy::kMicLedIndex || index == privacy::kCameraLedIndex) {
+                mclog::tagWarn(_tag, "set_led_multi: index reserved for privacy LED: {}", index);
+                return false;
+            }
+
+            mclog::tagInfo(_tag, "set_led_multi: index={}, r={}, g={}, b={}", index, r, g, b);
+
+            LvglLockGuard lock;
+
+            if (index < 6) {
+                GetStackChan().leftNeonLight().setColorAt(static_cast<uint8_t>(index), r, g, b);
+            } else {
+                GetStackChan().rightNeonLight().setColorAt(static_cast<uint8_t>(index - 6), r, g, b);
+            }
+
+            return true;
+        });
+
+    mclog::tagInfo(_tag, "add robot.get_privacy_state tool");
+    mcp_server.AddTool(
+        "self.robot.get_privacy_state",
+        "READ-ONLY. Returns BOTH the LED intent AND the underlying peripheral truth. "
+        "mic = 'off' | 'local' | 'streaming' (off = mic ADC closed; local = ADC on, only feeding "
+        "wake-word/VAD locally; streaming = ADC on AND opus frames being sent to the server). "
+        "camera = 'off' | 'streaming' (off = no consumer reading frames; streaming = face-detect "
+        "or take_photo is currently dequeuing camera frames). "
+        "mic_peripheral_open = true iff the audio codec input device is currently open. "
+        "camera_peripheral_streaming = true iff the camera driver is in a streamable state "
+        "(placeholder true-always until step 4-5 wires V4L2 truth). "
+        "last_capture_ts_ms = millis-since-boot of the last Capture() call (0 = never). "
+        "This tool CANNOT change the LEDs — they are hardware-tied to the actual peripheral state.",
+        std::vector<Property>{},
+        [this](const PropertyList& properties) -> ReturnValue {
+            const char* mic_str = "off";
+            switch (privacy::PrivacyLeds::getInstance().micState()) {
+                case privacy::MicState::Off:    mic_str = "off"; break;
+                case privacy::MicState::Local:  mic_str = "local"; break;
+                case privacy::MicState::Stream: mic_str = "streaming"; break;
+            }
+            const char* cam_str = "off";
+            switch (privacy::PrivacyLeds::getInstance().cameraState()) {
+                case privacy::CameraState::Off:    cam_str = "off"; break;
+                case privacy::CameraState::Active: cam_str = "streaming"; break;
+            }
+
+            // Peripheral-level truth. Independent of LED intent so the
+            // bridge can alarm if the two diverge (e.g. STREAMON issued
+            // but ISP still warming after step 4-5 lands).
+            bool mic_open = false;
+            if (auto* codec = Board::GetInstance().GetAudioCodec()) {
+                mic_open = codec->input_enabled();
+            }
+            bool cam_streaming = false;
+            uint32_t last_cap_ms = 0;
+            if (auto* cam = hal_bridge::board_get_camera()) {
+                cam_streaming = cam->isStreaming();
+                last_cap_ms   = cam->lastCaptureTimestampMs();
+            }
+            auto result = fmt::format(
+                R"({{"mic": "{}", "camera": "{}", "mic_peripheral_open": {}, "camera_peripheral_streaming": {}, "last_capture_ts_ms": {}}})",
+                mic_str, cam_str,
+                mic_open ? "true" : "false",
+                cam_streaming ? "true" : "false",
+                last_cap_ms);
+            mclog::tagInfo(_tag, "get_privacy_state: {}", result);
+            return result;
+        });
+
     mclog::tagInfo(_tag, "add robot.create_reminder tool");
     mcp_server.AddTool("self.robot.create_reminder",
                        "Create a reminder. Duration is in seconds. Message is what to say when time is up. Set repeat "
@@ -146,4 +244,78 @@ void Hal::xiaozhi_mcp_init()
                            tools::stop_reminder(id);
                            return true;
                        });
+
+    // -----------------------------------------------------------------
+    // Layer 4: face-recognition MCP tools (server-side compute, Phase B).
+    // The bridge owns embedding + match; these tools just stream the JPEG
+    // (enroll/recognize) or proxy a request (forget/list). Bridge endpoints
+    // are derived from the existing explain_url_ — see
+    // StackChanCamera::DeriveFaceUrl. Parental gate deferred for v1 per plan.
+    // -----------------------------------------------------------------
+
+    auto* camera = hal_bridge::board_get_camera();
+    if (camera) {
+        mclog::tagInfo(_tag, "add camera.face_enroll tool");
+        mcp_server.AddTool(
+            "self.camera.face_enroll",
+            "Enroll the currently-visible face under `name`. Captures a JPEG and POSTs "
+            "to the bridge /api/face/enroll. Bridge stores the 128-d embedding (not the "
+            "JPEG) in /root/.zeroclaw/faces.sqlite. Capacity 50 enrolled.",
+            PropertyList({Property("name", kPropertyTypeString, std::string(""))}),
+            [camera](const PropertyList& properties) -> ReturnValue {
+                std::string name = properties["name"].value<std::string>();
+                mclog::tagInfo(_tag, "face_enroll: name={}", name);
+                if (name.empty()) {
+                    return std::string(R"({"ok":false,"error":"empty_name"})");
+                }
+                if (!camera->Capture()) {
+                    return std::string(R"({"ok":false,"error":"capture_failed"})");
+                }
+                return camera->EnrollFace(name);
+            });
+
+        mclog::tagInfo(_tag, "add camera.face_recognize tool");
+        mcp_server.AddTool(
+            "self.camera.face_recognize",
+            "Capture a JPEG and ask the bridge who is in frame. Returns the bridge JSON "
+            "response: {ok, name, confidence}. Use after a face_detected event for "
+            "who-is-here lookups; the bridge throttles repeated calls server-side.",
+            std::vector<Property>{},
+            [camera](const PropertyList& properties) -> ReturnValue {
+                mclog::tagInfo(_tag, "face_recognize");
+                if (!camera->Capture()) {
+                    return std::string(R"({"ok":false,"error":"capture_failed"})");
+                }
+                return camera->RecognizeFace();
+            });
+
+        mclog::tagInfo(_tag, "add camera.face_forget tool");
+        mcp_server.AddTool(
+            "self.camera.face_forget",
+            "Delete the enrollment for `name` from the bridge. Pass name='*' to wipe "
+            "ALL enrollments. No on-device parental gate in v1 (family-only "
+            "deployment); re-enable before any wider deployment.",
+            PropertyList({Property("name", kPropertyTypeString, std::string(""))}),
+            [camera](const PropertyList& properties) -> ReturnValue {
+                std::string name = properties["name"].value<std::string>();
+                mclog::tagInfo(_tag, "face_forget: name={}", name);
+                if (name.empty()) {
+                    return std::string(R"({"ok":false,"error":"empty_name"})");
+                }
+                return camera->ForgetFace(name);
+            });
+
+        mclog::tagInfo(_tag, "add camera.face_list tool");
+        mcp_server.AddTool(
+            "self.camera.face_list",
+            "List all enrolled faces from the bridge. Returns {ok, names, count, "
+            "capacity}. Read-only — only names cross the wire, never embeddings.",
+            std::vector<Property>{},
+            [camera](const PropertyList& properties) -> ReturnValue {
+                mclog::tagInfo(_tag, "face_list");
+                return camera->ListFaces();
+            });
+    } else {
+        mclog::tagWarn(_tag, "camera unavailable — face_* MCP tools not registered");
+    }
 }
