@@ -114,6 +114,16 @@ struct UserAccountInfo_t {
  * @brief
  *
  */
+struct XiaozhiConfig_t {
+    uint32_t idleShutdownTimeSeconds = 600;
+    bool allowShutdownWhenCharging   = false;
+    uint8_t idleRandomMovementLevel  = 2;
+};
+
+/**
+ * @brief
+ *
+ */
 class BootLogo {
 public:
     BootLogo()
@@ -189,6 +199,8 @@ public:
         return _xiaozhi_start_requested;
     }
     void startXiaozhi();
+    XiaozhiConfig_t getXiaozhiConfig();
+    void setXiaozhiConfig(XiaozhiConfig_t config);
 
     /* ----------------------------------- BLE ---------------------------------- */
     uitk::Signal<const char*> onBleMotionData;

@@ -85,6 +85,7 @@ void AppAvatar::onOpen()
 
     // Create avatar (skin from Settings display.avatar_skin)
     auto avatar = avatar::make_avatar_from_settings(lv_screen_active());
+    avatar->getPanel()->onClick().connect([&]() { _screen_clicked_flag = true; });
     GetStackChan().attachAvatar(std::move(avatar));
 
     /* ------------------------------- BLE events ------------------------------- */
@@ -204,7 +205,10 @@ void AppAvatar::onOpen()
         LvglLockGuard lvgl_lock;
         auto sequence = stackchan::animation::parse_sequence_from_json(data.data());
         if (!sequence.empty()) {
-            GetStackChan().addModifier(std::make_unique<DanceModifier>(sequence));
+            if (_dance_modifier_id >= 0) {
+                GetStackChan().removeModifier(_dance_modifier_id);
+            }
+            _dance_modifier_id = GetStackChan().addModifier(std::make_unique<DanceModifier>(sequence));
         }
     });
 
@@ -239,6 +243,15 @@ void AppAvatar::onRunning()
         GetStackChan().updateMotionFromJson(_ble_motion_data.data_ptr);
         _ble_motion_data.update_flag = false;
         _ble_motion_data.data_ptr    = nullptr;
+    }
+
+    if (_screen_clicked_flag) {
+        _screen_clicked_flag = false;
+        if (_dance_modifier_id >= 0) {
+            GetStackChan().removeModifier(_dance_modifier_id);
+            _dance_modifier_id = -1;
+            mclog::tagInfo(getAppInfo().name, "dance modifier removed");
+        }
     }
 
     GetStackChan().update();
