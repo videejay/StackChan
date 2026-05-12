@@ -84,8 +84,9 @@ void AppAvatar::onOpen()
     // Destroy loading page
     loading_page.reset();
 
+    auto avatar = avatar::createConfiguredAvatar(lv_screen_active());
     avatar->getPanel()->onClick().connect([&]() { _screen_clicked_flag = true; });
-    GetStackChan().attachAvatar(avatar::createConfiguredAvatar(lv_screen_active()));
+    GetStackChan().attachAvatar(std::move(avatar));
 
     /* ------------------------------- BLE events ------------------------------- */
     GetHAL().onBleAvatarData.connect([&](const char* data) {
