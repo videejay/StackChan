@@ -24,7 +24,8 @@ static constexpr std::string_view _xiaozhi_config_nvs_ns                        
 static constexpr std::string_view _xiaozhi_config_idle_shutdown_time_key           = "idle_sec";
 static constexpr std::string_view _xiaozhi_config_allow_shutdown_when_charging_key = "ext_pwr";
 static constexpr std::string_view _xiaozhi_config_idle_random_movement_key         = "idle_lv";
-static constexpr std::string_view _xiaozhi_config_face_detection_key              = "face_det";
+static constexpr std::string_view _xiaozhi_config_face_detection_key              = "face_det_en";
+static constexpr std::string_view _xiaozhi_config_face_detection_legacy_key       = "face_det";
 
 namespace hal_bridge {
 
@@ -130,8 +131,10 @@ XiaozhiConfig_t get_xiaozhi_config()
         settings.GetBool(_xiaozhi_config_allow_shutdown_when_charging_key.data(), config.allowShutdownWhenCharging);
     config.idleRandomMovementLevel =
         settings.GetInt(_xiaozhi_config_idle_random_movement_key.data(), config.idleRandomMovementLevel);
+    const bool from_legacy =
+        settings.GetBool(_xiaozhi_config_face_detection_legacy_key.data(), config.faceDetectionEnabled);
     config.faceDetectionEnabled =
-        settings.GetBool(_xiaozhi_config_face_detection_key.data(), config.faceDetectionEnabled);
+        settings.GetBool(_xiaozhi_config_face_detection_key.data(), from_legacy);
 
     return config;
 }

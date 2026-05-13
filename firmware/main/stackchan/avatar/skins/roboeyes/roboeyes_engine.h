@@ -38,9 +38,9 @@ enum class RoboEyesMood : unsigned char {
  */
 class RoboEyesEngine {
 public:
-    RoboEyesEngine(uitk::lvgl_cpp::Container& viewport,
-                   uitk::lvgl_cpp::Container& eye_left,
-                   uitk::lvgl_cpp::Container& eye_right);
+    RoboEyesEngine(smooth_ui_toolkit::lvgl_cpp::Container& viewport,
+                   smooth_ui_toolkit::lvgl_cpp::Container& eye_left,
+                   smooth_ui_toolkit::lvgl_cpp::Container& eye_right);
 
     /** Logical drawing area matching viewport pixel size */
     void begin(int width, int height, lv_color_t main_color);
@@ -101,9 +101,9 @@ private:
     int getScreenConstraintY() const;
     void applyCardinalBaseline();
 
-    uitk::lvgl_cpp::Container* _viewport;
-    uitk::lvgl_cpp::Container* _eye_left_shape;
-    uitk::lvgl_cpp::Container* _eye_right_shape;
+    smooth_ui_toolkit::lvgl_cpp::Container* _viewport;
+    smooth_ui_toolkit::lvgl_cpp::Container* _eye_left_shape;
+    smooth_ui_toolkit::lvgl_cpp::Container* _eye_right_shape;
 
     int _screen_w = 300;
     int _screen_h = 120;
