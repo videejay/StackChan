@@ -99,6 +99,10 @@ void DefaultEyes::setEmotion(const Emotion& emotion)
         }
     };
 
+    // Reset pupil size each call. Surprise overrides below; everything else
+    // gets the neutral default.
+    setSize(0);
+
     switch (emotion) {
         case Emotion::Neutral:
             apply_style(100, 0);
@@ -110,13 +114,20 @@ void DefaultEyes::setEmotion(const Emotion& emotion)
             apply_style(70, 450);
             break;
         case Emotion::Sad:
-            apply_style(70, -400);
+            apply_style(40, 3200);
             break;
         case Emotion::Doubt:
             apply_style(75, 0);
             break;
         case Emotion::Sleepy:
             apply_style(35, -50);
+            break;
+        case Emotion::Surprise:
+            setSize(80);
+            apply_style(100, 0);
+            break;
+        case Emotion::Love:
+            apply_style(60, 800);
             break;
         default:
             break;

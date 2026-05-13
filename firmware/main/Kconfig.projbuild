@@ -991,3 +991,91 @@ menu "BLE prph Configuration"
             Use this option to enable resolving peer's address.
 
 endmenu
+
+menu "StackChan Launcher UI assets"
+
+    config STACKCHAN_SD_UI_ASSETS
+        bool "Mount SD card for Launcher UI assets"
+        depends on IDF_TARGET_ESP32S3
+        default y
+        help
+            When enabled, UI files are loaded first from the SD card before
+            falling back to LittleFS and embedded placeholders.
+
+            For M5Stack CoreS3-SE, place files in /assets at the root of the
+            microSD card. The default VFS path is /sdcard, so icon_home.bin is
+            read from /sdcard/assets/icon_home.bin.
+
+    config STACKCHAN_SD_MOUNT_PATH
+        string "SD card VFS mount path"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default "/sdcard"
+
+    config STACKCHAN_SD_ASSETS_SUBPATH
+        string "Subfolder holding icon/png/bin files under SD card root"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default "assets"
+
+    config STACKCHAN_SD_SPI_MOSI_GPIO
+        int "CoreS3-SE SD SPI MOSI GPIO"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default 37
+
+    config STACKCHAN_SD_SPI_MISO_GPIO
+        int "CoreS3-SE SD SPI MISO GPIO"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default 35
+
+    config STACKCHAN_SD_SPI_SCLK_GPIO
+        int "CoreS3-SE SD SPI SCLK GPIO"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default 36
+
+    config STACKCHAN_SD_SPI_CS_GPIO
+        int "CoreS3-SE SD SPI CS GPIO"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default 4
+
+    config STACKCHAN_SD_MAX_FILES
+        int "Maximum open files on SD card"
+        depends on STACKCHAN_SD_UI_ASSETS
+        default 5
+
+    config STACKCHAN_LITTLEFS_UI_ASSETS
+        bool "Mount LittleFS for Launcher UI overrides (icons/background)"
+        default y
+        help
+            When enabled (and the userdata/littlefs partition is present),
+            UI files are loaded from mount path + assets subfolder after SD card
+            lookup and before falling back to embedded placeholders (Launcher-friendly).
+
+            Disable if building without a userdata/littlefs region.
+
+    config STACKCHAN_LITTLEFS_PARTITION_LABEL
+        string "LittleFS partition label"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default "userdata"
+
+    config STACKCHAN_LITTLEFS_MOUNT_PATH
+        string "VFS mount path"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default "/launcherfs"
+
+    config STACKCHAN_LITTLEFS_ASSETS_SUBPATH
+        string "Subfolder holding icon/png/bin files under mount path"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default "assets"
+
+    config STACKCHAN_LITTLEFS_FORMAT_IF_MOUNT_FAILED
+        bool "Format LittleFS if mount fails"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default n
+        help
+            Erases userdata and formats filesystem on mount failure — use cautiously.
+
+    config STACKCHAN_LITTLEFS_MOUNT_READ_ONLY
+        bool "Mount Launcher LittleFS read-only"
+        depends on STACKCHAN_LITTLEFS_UI_ASSETS
+        default y
+
+endmenu

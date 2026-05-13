@@ -68,6 +68,12 @@ void AppSetup::onOpen()
               [&]() {
                   _destroy_menu = true;
                   _worker       = std::make_unique<TimezoneWorker>();
+              }},
+             {"Avatar Skin",
+              [&]() {
+                  _destroy_menu    = true;
+                  _need_warm_reset = true;
+                  _worker          = std::make_unique<AvatarSkinWorker>();
               }}},
         },
         {

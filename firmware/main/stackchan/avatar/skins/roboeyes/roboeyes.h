@@ -7,46 +7,30 @@
 
 #include "../../avatar/avatar.h"
 #include "../../avatar/elements/feature.h"
-#include "roboeyes_engine.h"
+#include "../default/default.h"
+
 #include <lvgl.h>
 #include <smooth_lvgl.hpp>
 #include <memory>
 
 namespace stackchan::avatar {
 
-/**
- * @brief RoboEyes-style LVGL avatar (eyes only + DefaultSpeechBubble, no mouth).
- */
 class RoboEyesAvatar : public Avatar {
 public:
     lv_color_t primaryColor   = lv_color_white();
     lv_color_t secondaryColor = lv_color_black();
 
-    RoboEyesAvatar();
-    ~RoboEyesAvatar() override;
-
     void init(lv_obj_t* parent, const lv_font_t* font = &lv_font_montserrat_16);
-
     uitk::lvgl_cpp::Container* getPanel() const override;
-
-    void update() override;
 
 private:
     std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _viewport;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _eye_left_lv;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _eye_right_lv;
-    std::unique_ptr<RoboEyesEngine>             _engine;
 };
 
-/**
- * @brief Feature bridge: one logical eye → shared RoboEyesEngine weights / gaze / mood.
- */
-class RoboEyesEyeFeature : public Feature {
+class RoboEyesEye : public Feature {
 public:
-    RoboEyesEyeFeature(RoboEyesEngine* engine,
-                       bool               is_left);
-    ~RoboEyesEyeFeature();
+    RoboEyesEye(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor, bool isLeftEye);
+    ~RoboEyesEye();
 
     void setPosition(const uitk::Vector2i& position) override;
     void setWeight(int weight) override;
@@ -54,33 +38,51 @@ public:
     void setEmotion(const Emotion& emotion) override;
     void setVisible(bool visible) override;
     void setSize(int size) override;
+    void _update() override;
 
 private:
-    RoboEyesEngine*             _engine;
-    bool                         _left;
+    void applyTargetFromState();
+    void render();
+    int moodTopCoverHeight() const;
+    int moodTopCoverRotation() const;
+
+    bool _is_left_eye = false;
+    Emotion _emotion = Emotion::Neutral;
+
+    int _current_x = 0;
+    int _current_y = 0;
+    int _current_width = 74;
+    int _current_height = 54;
+    int _current_radius = 14;
+    int _current_top_cover = 0;
+    int _current_bottom_cover = 0;
+
+    int _target_x = 0;
+    int _target_y = 0;
+    int _target_width = 74;
+    int _target_height = 54;
+    int _target_radius = 14;
+    int _target_top_cover = 0;
+    int _target_bottom_cover = 0;
+
+    std::unique_ptr<uitk::lvgl_cpp::Container> _container;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _eye;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _top_cover;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _bottom_cover;
 };
 
-/**
- * @brief Placeholder mouth (SpeakingModifier-safe no-op).
- */
-class RoboEyesMouthFeature : public Feature {
+class RoboEyesMouth : public Feature {
 public:
-    void setWeight(int weight) override
-    {
-        Feature::setWeight(weight);
-    }
-    void setPosition(const uitk::Vector2i& position) override
-    {
-        Element::setPosition(position);
-    }
-    void setRotation(int rotation) override
-    {
-        Element::setRotation(rotation);
-    }
-    void setVisible(bool visible) override
-    {
-        Element::setVisible(visible);
-    }
+    RoboEyesMouth(lv_obj_t* parent, lv_color_t primaryColor, lv_color_t secondaryColor);
+    ~RoboEyesMouth();
+
+    void setPosition(const uitk::Vector2i& position) override;
+    void setWeight(int weight) override;
+    void setRotation(int rotation) override;
+    void setVisible(bool visible) override;
+
+private:
+    std::unique_ptr<uitk::lvgl_cpp::Container> _mouth;
 };
 
 }  // namespace stackchan::avatar

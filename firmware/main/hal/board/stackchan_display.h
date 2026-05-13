@@ -15,17 +15,21 @@ private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_       = nullptr;
     int speaking_modifier_id_           = -1;
+    int thinking_modifier_id_           = -1;
     int idle_motion_modifier_id_        = -1;
     int idle_expression_modifier_id_    = -1;
+    int face_tracking_modifier_id_      = -1;
     int blink_modifier_id_              = -1;
+    int love_decorator_id_              = -1;
     bool is_sleeping_                   = false;
-    uint8_t idle_motion_level_          = 2;
+    bool thinking_led_pending_          = false;
+    bool in_listening_status_           = false;
+    esp_timer_handle_t bubble_clear_timer_            = nullptr;
+    esp_timer_handle_t thinking_timer_                = nullptr;
 
     lv_obj_t* preview_image_                         = nullptr;
     esp_timer_handle_t preview_timer_                = nullptr;
     std::unique_ptr<LvglImage> preview_image_cached_ = nullptr;
-
-    void CreateIdleMotionModifier();
 
 protected:
     virtual bool Lock(int timeout_ms = 0) override;

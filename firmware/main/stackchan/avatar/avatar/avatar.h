@@ -8,6 +8,7 @@
 #include "decorator.h"
 #include <smooth_lvgl.hpp>
 #include <memory>
+#include <smooth_lvgl.hpp>
 
 namespace stackchan::avatar {
 
@@ -18,6 +19,7 @@ namespace stackchan::avatar {
 class Avatar {
 public:
     virtual ~Avatar() = default;
+
     /**
      * @brief Update avatar, trigger all elements, decorators and modifiers to update
      *
@@ -108,9 +110,11 @@ public:
     {
         return _is_modify_locked;
     }
-
     /** LVGL panel (null if skin has no clickable panel) */
-    virtual uitk::lvgl_cpp::Container* getPanel() const { return nullptr; }
+    virtual uitk::lvgl_cpp::Container* getPanel() const
+    {
+        return nullptr;
+    }
 
     /* ---------------------------- Decorator helpers --------------------------- */
 

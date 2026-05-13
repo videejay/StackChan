@@ -7,6 +7,7 @@
 #include <src/misc/lv_area.h>
 #include <src/misc/lv_text.h>
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <ArduinoJson.hpp>
 #include <mooncake_log.h>
 #include <hal/hal.h>
@@ -25,7 +26,7 @@ WifiSetupWorker::WifiSetupWorker()
     _is_first_in = true;
 
     // Create avatar (eyes/mouth visibility customized below)
-    auto avatar = avatar::make_avatar_from_settings(lv_screen_active(), &lv_font_montserrat_24);
+    auto avatar = avatar::createConfiguredAvatar(lv_screen_active(), &lv_font_montserrat_24);
     avatar->leftEye().setVisible(false);
     avatar->rightEye().setVisible(false);
     avatar->mouth().setVisible(false);

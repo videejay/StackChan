@@ -124,6 +124,8 @@ struct XiaozhiConfig_t {
  * @brief
  *
  */
+namespace stackchan { namespace privacy { class PrivacyLeds; } }
+
 enum class MicTestStatus {
     Starting = 0,
     Recording,
@@ -181,6 +183,9 @@ class Hal {
 public:
     void init();
 
+    // PrivacyLeds writes mic/camera indicator pixels via setRgbColor_privacy_only.
+    friend class stackchan::privacy::PrivacyLeds;
+
     /* --------------------------------- System --------------------------------- */
     void delay(std::uint32_t ms);
     std::uint32_t millis();
@@ -200,6 +205,9 @@ public:
     void lvglUnlock();
     void setBackLightBrightness(uint8_t brightness, bool permanent = false);
     uint8_t getBackLightBrightness();
+
+    /** MCP camera indicator on RGB ring (non-privacy LEDs); timer auto-off when duration_ms > 0. */
+    void setCameraLedActive(bool active, uint32_t duration_ms = 0);
 
     /* --------------------------------- Xiaozhi -------------------------------- */
     void requestXiaozhiStart()
@@ -231,6 +239,7 @@ public:
     uitk::Signal<HeadPetGesture> onHeadPetGesture;
 
     /* ----------------------------------- RGB ---------------------------------- */
+    // Public path rejects privacy-reserved indices (see privacy_leds.h).
     void setRgbColor(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
     void showRgbColor(uint8_t r, uint8_t g, uint8_t b);
     void refreshRgb();
@@ -268,6 +277,8 @@ public:
     void setLaserEnabled(bool enabled);
 
     /* ------------------------------- Warm Reboot ------------------------------ */
+    /** Magic app index: open Settings instead of skipping mooncake (launcher compatibility). */
+    static constexpr int kWarmRebootSettings = 99;
     void requestWarmReboot(int appIndex);
     int getWarmRebootTarget();
     void clearWarmRebootRequest();
@@ -312,6 +323,8 @@ private:
     void io_expander_init();
     void imu_init();
     void rtc_init();
+
+    void setRgbColor_privacy_only(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
 };
 
 Hal& GetHAL();

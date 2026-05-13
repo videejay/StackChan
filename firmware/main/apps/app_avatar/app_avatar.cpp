@@ -11,6 +11,7 @@
 #include <assets/assets.h>
 #include <smooth_lvgl.hpp>
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <apps/common/common.h>
 #include <string_view>
 #include <cstdint>
@@ -83,8 +84,7 @@ void AppAvatar::onOpen()
     // Destroy loading page
     loading_page.reset();
 
-    // Create avatar (skin from Settings display.avatar_skin)
-    auto avatar = avatar::make_avatar_from_settings(lv_screen_active());
+    auto avatar = avatar::createConfiguredAvatar(lv_screen_active());
     avatar->getPanel()->onClick().connect([&]() { _screen_clicked_flag = true; });
     GetStackChan().attachAvatar(std::move(avatar));
 

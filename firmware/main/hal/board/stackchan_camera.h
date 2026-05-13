@@ -5,6 +5,7 @@
 #include <lvgl.h>
 #include <thread>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <freertos/FreeRTOS.h>
@@ -18,6 +19,10 @@ struct JpegChunk {
     uint8_t* data;
     size_t len;
 };
+
+namespace stackchan::privacy {
+class CameraPeripheralGuard;
+}
 
 class StackChanCamera : public Camera {
 private:
@@ -44,6 +49,31 @@ private:
     std::string explain_token_;
     std::thread encoder_thread_;
 
+    // Privacy LED step 3: peripheral-level truth surfaced via MCP
+    // get_privacy_state. Updated at the top of Capture(); 0 means "no
+    // photo since boot". Wraps every ~49 days (uint32_t millis) — fine.
+    uint32_t last_capture_ts_ms_ = 0;
+
+    // Phase B (face recognition) helpers. Multipart streamer factored out
+    // of Explain() so the face_enroll/face_recognize tools can reuse it.
+    std::string StreamJpegToBridge(
+        const std::string& url, const std::string& token,
+        const std::vector<std::pair<std::string, std::string>>& extra_fields);
+    std::string DeriveFaceUrl(const std::string& verb) const;
+    std::string SimpleBridgeRequest(const std::string& method, const std::string& url,
+                                    const std::string& content_type, const std::string& body);
+
+    // Privacy LED steps 4-5 lifecycle. Reachable only through the friend
+    // CameraPeripheralGuard refcount — the only path that should toggle
+    // V4L2 stream state. startStreaming() may block up to 5 s for ISP
+    // autoexposure warmup on first call; subsequent calls are cheap and
+    // return early when streaming_on_ is already true. stopStreaming()
+    // is a no-op when already stopped. Both ignore failure to keep the
+    // guard refcount honest — diagnostics surface via streaming_on_.
+    bool startStreaming();
+    void stopStreaming();
+    friend class stackchan::privacy::CameraPeripheralGuard;
+
 public:
     StackChanCamera(const esp_video_init_config_t& config);
     ~StackChanCamera();
@@ -56,6 +86,22 @@ public:
     virtual bool SetHMirror(bool enabled) override;
     virtual bool SetVFlip(bool enabled) override;
     virtual std::string Explain(const std::string& question);
+
+    // Layer 4 face recognition (server-side). All four go to the bridge
+    // at the URL derived from explain_url_ — see DeriveFaceUrl().
+    virtual std::string EnrollFace(const std::string& name);
+    virtual std::string RecognizeFace();
+    virtual std::string ForgetFace(const std::string& name);
+    virtual std::string ListFaces();
+
+    // Privacy LED step 3 accessors. isStreaming() is a placeholder that
+    // returns true unconditionally; step 4-5 (the camera lifecycle
+    // refactor) will replace it with the real V4L2 stream state.
+    bool isStreaming() const;
+    uint32_t lastCaptureTimestampMs() const
+    {
+        return last_capture_ts_ms_;
+    }
 
     const uint8_t* GetFrameData()
     {

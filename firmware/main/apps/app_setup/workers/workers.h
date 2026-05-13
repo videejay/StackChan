@@ -374,6 +374,24 @@ private:
  * @brief
  *
  */
+class AvatarSkinWorker : public WorkerBase {
+public:
+    AvatarSkinWorker();
+    ~AvatarSkinWorker();
+    void update() override;
+
+private:
+    std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
+    std::unique_ptr<uitk::lvgl_cpp::Roller> _roller;
+    std::unique_ptr<uitk::lvgl_cpp::Button> _btn_confirm;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label;
+    bool _confirm_flag = false;
+};
+
+/**
+ * @brief
+ *
+ */
 class FactoryResetWorker : public WorkerBase {
 public:
     FactoryResetWorker(std::function<void()> beforeResetAction = {});

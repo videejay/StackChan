@@ -5,6 +5,7 @@
  */
 #include "workers.h"
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <apps/common/toast/toast.h>
 #include <mooncake_log.h>
 #include <assets/assets.h>
@@ -200,8 +201,72 @@ void TimezoneWorker::update()
     }
 }
 
-FactoryResetWorker::FactoryResetWorker(std::function<void()> beforeResetAction)
+AvatarSkinWorker::AvatarSkinWorker()
 {
+    _panel = std::make_unique<uitk::lvgl_cpp::Container>(lv_screen_active());
+    _panel->setPadding(0, 0, 0, 0);
+    _panel->setBgColor(lv_color_hex(0xEDF4FF));
+    _panel->align(LV_ALIGN_CENTER, 0, 0);
+    _panel->setBorderWidth(0);
+    _panel->setSize(320, 240);
+    _panel->setRadius(0);
+
+    _label = std::make_unique<uitk::lvgl_cpp::Label>(_panel->get());
+    _label->setText("Avatar Skin");
+    _label->setTextFont(&lv_font_montserrat_16);
+    _label->setTextColor(lv_color_hex(0x26206A));
+    _label->align(LV_ALIGN_CENTER, 0, -100);
+
+    _roller = std::make_unique<uitk::lvgl_cpp::Roller>(_panel->get());
+    _roller->setSize(210, 150);
+    _roller->setOptions("Default\nRoboEyes");
+    _roller->align(LV_ALIGN_CENTER, -40, 20);
+    _roller->setTextFont(&lv_font_montserrat_20);
+    _roller->setTextColor(lv_color_hex(0x26206A));
+    _roller->setBgColor(lv_color_hex(0xB8D3FD));
+    _roller->setRadius(18);
+    _roller->setShadowWidth(0);
+    _roller->setBorderWidth(0);
+    _roller->setBgColor(lv_color_hex(0x615B9E), LV_PART_SELECTED);
+
+    auto current_skin = stackchan::avatar::getConfiguredSkinName();
+    _roller->setSelected(current_skin == stackchan::avatar::kAvatarSkinRoboEyes ? 1 : 0, LV_ANIM_OFF);
+
+    _btn_confirm = std::make_unique<uitk::lvgl_cpp::Button>(_panel->get());
+    _btn_confirm->label().setText("ok");
+    _btn_confirm->label().setTextFont(&lv_font_montserrat_24);
+    _btn_confirm->setSize(60, 110);
+    _btn_confirm->align(LV_ALIGN_CENTER, 115, 40);
+    _btn_confirm->onClick().connect([&]() { _confirm_flag = true; });
+    _btn_confirm->setRadius(18);
+    _btn_confirm->setShadowWidth(0);
+    _btn_confirm->setBgColor(lv_color_hex(0x615B9E));
+}
+
+AvatarSkinWorker::~AvatarSkinWorker()
+{
+}
+
+void AvatarSkinWorker::update()
+{
+    if (!_confirm_flag) {
+        return;
+    }
+
+    _confirm_flag = false;
+
+    auto selected_skin = _roller->getSelected() == 1 ? stackchan::avatar::kAvatarSkinRoboEyes
+                                                     : stackchan::avatar::kAvatarSkinDefault;
+    stackchan::avatar::setConfiguredSkinName(selected_skin);
+
+    view::pop_a_toast(fmt::format("{} Skin Set", stackchan::avatar::getSkinDisplayName(selected_skin)),
+                      view::ToastType::Success);
+    mclog::tagInfo(_tag, "avatar skin set to: {}", selected_skin);
+
+    _is_done = true;
+}
+
+FactoryResetWorker::FactoryResetWorker(std::function<void()> beforeResetAction){
     _before_reset_action = std::move(beforeResetAction);
 
     _panel = std::make_unique<uitk::lvgl_cpp::Container>(lv_screen_active());

@@ -8,6 +8,7 @@
 #include <mooncake.h>
 #include <mooncake_log.h>
 #include <stackchan/stackchan.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <apps/common/common.h>
 #include <assets/assets.h>
 
@@ -52,8 +53,7 @@ void AppDance::onOpen()
     // Destroy loading page
     loading_page.reset();
 
-    auto avatar = avatar::make_avatar_from_settings(lv_screen_active());
-    GetStackChan().attachAvatar(std::move(avatar));
+    GetStackChan().attachAvatar(avatar::createConfiguredAvatar(lv_screen_active()));
 
     /* ------------------------------- BLE events ------------------------------- */
     GetHAL().onBleAvatarData.connect([&](const char* data) {

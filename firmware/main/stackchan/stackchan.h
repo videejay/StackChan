@@ -7,6 +7,7 @@
 #include "modifiable.h"
 #include "modifiers/modifiers.h"
 #include "json/json_helper.h"
+#include <cstring>
 #include <memory>
 
 namespace stackchan {
@@ -113,6 +114,29 @@ public:
     Modifier* getModifier(int id)
     {
         return _modifier_pool.get(id);
+    }
+
+    /**
+     * Find first modifier whose Modifier::name() matches (stable lookup for
+     * cross-modifier wiring, e.g. FaceTrackingModifier → IdleMotionModifier).
+     */
+    Modifier* getModifierByName(const char* name)
+    {
+        if (!name || !name[0]) {
+            return nullptr;
+        }
+        Modifier* found = nullptr;
+        _modifier_pool.forEach(
+            [&](Modifier* m, int) {
+                if (found || !m) {
+                    return;
+                }
+                const char* n = m->name();
+                if (n && n[0] && std::strcmp(n, name) == 0) {
+                    found = m;
+                }
+            });
+        return found;
     }
     bool removeModifier(int id)
     {

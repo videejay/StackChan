@@ -1,9 +1,13 @@
-# ESP-IDF Partition Table
+# ESP-IDF — 16 MB flash (CoreS3). Classic xiaozhi-style SPIFFS assets @ 0xD00000 (label: assets).
+# Dual OTA: two slots fill 0x20000 .. 0xCC0000; remainder 256 KiB = optional LittleFS "userdata".
+# Sizes: ~6.62 MiB per OTA slot (fits current app); userdata is small — use SD/embedded for large UI caches.
+#
 # Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,    0x4000,
-otadata,  data, ota,     0xd000,    0x2000,
-phy_init, data, phy,     0xf000,    0x1000,
-ota_0,    app,  ota_0,   0x20000,   0x4f0000,
-ota_1,    app,  ota_1,   ,          0x4f0000,
-assets,   data, spiffs,  0xA00000,  4M,
-coredump, data, coredump,,          0x10000,
+nvs,      data, nvs,       0x9000,     0x4000,
+otadata,  data, ota,       0xd000,     0x2000,
+phy_init, data, phy,       0xf000,     0x1000,
+ota_0,    app,  ota_0,     0x20000,    0x650000,
+ota_1,    app,  ota_1,     ,           0x650000,
+userdata, data, littlefs,   0xCC0000,   0x40000,
+assets,   data, spiffs,     0xD00000,   0x2D0000,
+coredump, data, coredump,  ,           0x30000,

@@ -81,7 +81,25 @@ index ad61944..6b84daf 100644
  #if HAVE_LVGL
  #include "display/lcd_display.h"
  #include <spi_flash_mmap.h>
-@@ -356,72 +356,72 @@ bool Assets::LvglStrategy::Apply(Assets* assets) {
+@@ -40,12 +40,16 @@ Assets::~Assets() {
+ Assets::~Assets() {
+     UnApplyPartition();
+ }
+ 
+ bool Assets::FindPartition(Assets* assets) {
+     assets->partition_ = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, PARTITION_LABEL);
+     if (assets->partition_ == nullptr) {
+-        ESP_LOGI(TAG, "No assets partition found");
++        // bmorcelli/Launcher exposes the SPIFFS data slot under the label "spiffs".
++        assets->partition_ = esp_partition_find_first(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, "spiffs");
++    }
++    if (assets->partition_ == nullptr) {
++        ESP_LOGI(TAG, "No assets/spiffs partition found");
+         return false;
+     }
+     return true;
+ }
+@@ -360,72 +360,72 @@ bool Assets::LvglStrategy::Apply(Assets* assets) {
  }
  #endif // HAVE_LVGL
  

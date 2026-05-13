@@ -17,6 +17,7 @@ file(GLOB_RECURSE STACK_CHAN_SOURCES
 )
 set(STACK_CHAN_INCLUDE_DIRS 
     "."
+    "assets"
 )
 list(APPEND STACK_CHAN_SOURCES main.cpp)
 
@@ -115,9 +116,10 @@ set(EMOTE_RESOLUTION "320_240")
 # Set default assets if the board uses partition table V2
 if(CONFIG_BOARD_TYPE_M5STACK_STACK_CHAN)
     set(BOARD_TYPE "m5stack-stack-chan")
-    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
-    set(BUILTIN_ICON_FONT font_awesome_20_4)
-    set(DEFAULT_EMOJI_COLLECTION twemoji_64)
+    # Smaller fonts/emoji so generated assets fit Launcher's spiffs slot (~2.81 MB @ 0xD00000)
+    set(BUILTIN_TEXT_FONT font_puhui_basic_16_4)
+    set(BUILTIN_ICON_FONT font_awesome_16_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
 endif()
 
 if(MANUFACTURER)
@@ -289,6 +291,27 @@ if(CONFIG_IDF_TARGET_ESP32S3)
     list(APPEND SOURCES "${XIAOZHI_MAIN_DIR}/boards/common/esp32_camera.cc")
 endif()
 
+set(STACKCHAN_LAUNCHER_ASSETS_GEN_C ${CMAKE_BINARY_DIR}/stackchan_launcher_assets.gen.c)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    find_program(STACKCHAN_PYTHON_EXECUTABLE NAMES python python3 REQUIRED)
+    file(GLOB ASSETS_BIN_INPUT_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin/*")
+
+    add_custom_command(
+        OUTPUT ${STACKCHAN_LAUNCHER_ASSETS_GEN_C}
+        COMMAND ${STACKCHAN_PYTHON_EXECUTABLE}
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/tools/gen_launcher_embedded_assets.py"
+            "--assets-bin" "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin"
+            "--out" "${STACKCHAN_LAUNCHER_ASSETS_GEN_C}"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/tools/gen_launcher_embedded_assets.py"
+            ${ASSETS_BIN_INPUT_FILES}
+        COMMENT "Generate embedded StackChan Launcher UI assets (fallback)"
+        VERBATIM
+    )
+    list(APPEND SOURCES ${STACKCHAN_LAUNCHER_ASSETS_GEN_C})
+endif()
+
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
@@ -316,51 +339,53 @@ idf_component_register(SRCS ${SOURCES}
                         mooncake
                         mooncake_log
                         smooth_ui_toolkit
+                        littlefs
                     )
 
 # Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
 # If BOARD_NAME is empty, use BOARD_TYPE
-if(NOT BOARD_NAME)
-    set(BOARD_NAME ${BOARD_TYPE})
-endif()
-target_compile_definitions(${COMPONENT_LIB}
-                    PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\" BOARD_NAME=\"${BOARD_NAME}\"
-                    PRIVATE BUILTIN_TEXT_FONT=${BUILTIN_TEXT_FONT} BUILTIN_ICON_FONT=${BUILTIN_ICON_FONT}
-                    )
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    if(NOT BOARD_NAME)
+        set(BOARD_NAME ${BOARD_TYPE})
+    endif()
+    target_compile_definitions(${COMPONENT_LIB}
+                        PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\" BOARD_NAME=\"${BOARD_NAME}\"
+                        PRIVATE BUILTIN_TEXT_FONT=${BUILTIN_TEXT_FONT} BUILTIN_ICON_FONT=${BUILTIN_ICON_FONT}
+                        )
 
-# Add generation rules
-add_custom_command(
-    OUTPUT ${LANG_HEADER}
-    COMMAND python ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
-            --language "${LANG_DIR}"
-            --output "${LANG_HEADER}"
-    DEPENDS
-        ${LANG_JSON}
-        ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
-    COMMENT "Generating ${LANG_DIR} language config"
-)
+    # Add generation rules
+    add_custom_command(
+        OUTPUT ${LANG_HEADER}
+        COMMAND python ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
+                --language "${LANG_DIR}"
+                --output "${LANG_HEADER}"
+        DEPENDS
+            ${LANG_JSON}
+            ${XIAOZHI_MAIN_DIR}/../scripts/gen_lang.py
+        COMMENT "Generating ${LANG_DIR} language config"
+    )
 
-# Force build generation dependencies
-add_custom_target(lang_header ALL
-    DEPENDS ${LANG_HEADER}
-)
+    # Force build generation dependencies
+    add_custom_target(lang_header ALL
+        DEPENDS ${LANG_HEADER}
+    )
 
-# Find ESP-SR component dynamically
-find_component_by_pattern("espressif__esp-sr" ESP_SR_COMPONENT ESP_SR_COMPONENT_PATH)
-if(ESP_SR_COMPONENT_PATH)
-    set(ESP_SR_MODEL_PATH "${ESP_SR_COMPONENT_PATH}/model")
-endif()
+    # Find ESP-SR component dynamically
+    find_component_by_pattern("espressif__esp-sr" ESP_SR_COMPONENT ESP_SR_COMPONENT_PATH)
+    if(ESP_SR_COMPONENT_PATH)
+        set(ESP_SR_MODEL_PATH "${ESP_SR_COMPONENT_PATH}/model")
+    endif()
 
-# Find xiaozhi-fonts component dynamically
-find_component_by_pattern("xiaozhi-fonts" XIAOZHI_FONTS_COMPONENT XIAOZHI_FONTS_COMPONENT_PATH)
-if(XIAOZHI_FONTS_COMPONENT_PATH)
-    set(XIAOZHI_FONTS_PATH "${XIAOZHI_FONTS_COMPONENT_PATH}")
-endif()
+    # Find xiaozhi-fonts component dynamically
+    find_component_by_pattern("xiaozhi-fonts" XIAOZHI_FONTS_COMPONENT XIAOZHI_FONTS_COMPONENT_PATH)
+    if(XIAOZHI_FONTS_COMPONENT_PATH)
+        set(XIAOZHI_FONTS_PATH "${XIAOZHI_FONTS_COMPONENT_PATH}")
+    endif()
 
-if(CONFIG_BOARD_TYPE_ESP_HI)
-set(URL "https://github.com/espressif2022/image_player/raw/main/test_apps/test_8bit")
-set(EMOJI_DIR "${CMAKE_BINARY_DIR}/emoji")
-file(MAKE_DIRECTORY ${EMOJI_DIR})
+    if(CONFIG_BOARD_TYPE_ESP_HI)
+    set(URL "https://github.com/espressif2022/image_player/raw/main/test_apps/test_8bit")
+    set(EMOJI_DIR "${CMAKE_BINARY_DIR}/emoji")
+    file(MAKE_DIRECTORY ${EMOJI_DIR})
 
 # List all files to download
 set(FILES_TO_DOWNLOAD "")
@@ -392,143 +417,11 @@ foreach(FILENAME IN LISTS FILES_TO_DOWNLOAD)
     endif()
 endforeach()
 
+    endif()
 endif()
 
-set(DEFAULT_ASSETS_EXTRA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/assets_bin")
-
-# Function to build default assets based on configuration
-function(build_default_assets_bin)
-    # Set output path for generated assets.bin
-    set(GENERATED_ASSETS_BIN "${CMAKE_BINARY_DIR}/generated_assets.bin")
-    
-    # Prepare arguments for build script
-    set(BUILD_ARGS
-        "--sdkconfig" "${SDKCONFIG}"
-        "--output" "${GENERATED_ASSETS_BIN}"
-    )
-    
-    # Add builtin text font if defined
-    if(BUILTIN_TEXT_FONT)
-        list(APPEND BUILD_ARGS "--builtin_text_font" "${BUILTIN_TEXT_FONT}")
-    endif()
-    
-    # Add default emoji collection if defined
-    if(DEFAULT_EMOJI_COLLECTION)
-        list(APPEND BUILD_ARGS "--emoji_collection" "${DEFAULT_EMOJI_COLLECTION}")
-    endif()
-    
-    # Add default assets extra files if defined
-    if(DEFAULT_ASSETS_EXTRA_FILES)
-        list(APPEND BUILD_ARGS "--extra_files" "${DEFAULT_ASSETS_EXTRA_FILES}")
-    endif()
-    
-    list(APPEND BUILD_ARGS "--esp_sr_model_path" "${ESP_SR_MODEL_PATH}")
-    list(APPEND BUILD_ARGS "--xiaozhi_fonts_path" "${XIAOZHI_FONTS_PATH}")
-    
-    # Create custom command to build assets
-    add_custom_command(
-        OUTPUT ${GENERATED_ASSETS_BIN}
-        COMMAND python ${XIAOZHI_MAIN_DIR}/../scripts/build_default_assets.py ${BUILD_ARGS}
-        DEPENDS
-            ${SDKCONFIG}
-            ${XIAOZHI_MAIN_DIR}/../scripts/build_default_assets.py
-        COMMENT "Building default assets.bin based on configuration"
-        VERBATIM
-    )
-    
-    # Create target for generated assets
-    add_custom_target(generated_default_assets ALL
-        DEPENDS ${GENERATED_ASSETS_BIN}
-    )
-    
-    # Set the generated file path in parent scope
-    set(GENERATED_ASSETS_LOCAL_FILE ${GENERATED_ASSETS_BIN} PARENT_SCOPE)
-    
-    message(STATUS "Default assets build configured: ${GENERATED_ASSETS_BIN}")
-endfunction()
-
-
-# Function to get local assets file path (handles both URL and local file)
-function(get_assets_local_file assets_source assets_local_file_var)
-    # Check if it's a URL (starts with http:// or https://)
-    if(assets_source MATCHES "^https?://")
-        # It's a URL, download it
-        get_filename_component(ASSETS_FILENAME "${assets_source}" NAME)
-        set(ASSETS_LOCAL_FILE "${CMAKE_BINARY_DIR}/${ASSETS_FILENAME}")
-        set(ASSETS_TEMP_FILE "${CMAKE_BINARY_DIR}/${ASSETS_FILENAME}.tmp")
-        
-        # Check if local file exists
-        if(EXISTS ${ASSETS_LOCAL_FILE})
-            message(STATUS "Assets file ${ASSETS_FILENAME} already exists, skipping download")
-        else()
-            message(STATUS "Downloading ${ASSETS_FILENAME}")
-            
-            # Clean up any existing temp file
-            if(EXISTS ${ASSETS_TEMP_FILE})
-                file(REMOVE ${ASSETS_TEMP_FILE})
-            endif()
-            
-            # Download to temporary file first
-            file(DOWNLOAD ${assets_source} ${ASSETS_TEMP_FILE}
-                 STATUS DOWNLOAD_STATUS)
-            list(GET DOWNLOAD_STATUS 0 STATUS_CODE)
-            if(NOT STATUS_CODE EQUAL 0)
-                # Clean up temp file on failure
-                if(EXISTS ${ASSETS_TEMP_FILE})
-                    file(REMOVE ${ASSETS_TEMP_FILE})
-                endif()
-                message(FATAL_ERROR "Failed to download ${ASSETS_FILENAME} from ${assets_source}")
-            endif()
-            
-            # Move temp file to final location (atomic operation)
-            file(RENAME ${ASSETS_TEMP_FILE} ${ASSETS_LOCAL_FILE})
-            message(STATUS "Successfully downloaded ${ASSETS_FILENAME}")
-        endif()
-    else()
-        # It's a local file path
-        if(IS_ABSOLUTE "${assets_source}")
-            set(ASSETS_LOCAL_FILE "${assets_source}")
-        else()
-            set(ASSETS_LOCAL_FILE "${XIAOZHI_MAIN_DIR}/${assets_source}")
-        endif()
-        
-        # Check if local file exists
-        if(NOT EXISTS ${ASSETS_LOCAL_FILE})
-            message(FATAL_ERROR "Assets file not found: ${ASSETS_LOCAL_FILE}")
-        endif()
-        
-        message(STATUS "Using assets file: ${ASSETS_LOCAL_FILE}")
-    endif()
-    
-    set(${assets_local_file_var} ${ASSETS_LOCAL_FILE} PARENT_SCOPE)
-endfunction()
-
-
-partition_table_get_partition_info(size "--partition-name assets" "size")
-partition_table_get_partition_info(offset "--partition-name assets" "offset")
-if ("${size}" AND "${offset}")
-    # Flash assets based on configuration
-    if(CONFIG_FLASH_DEFAULT_ASSETS)
-        # Build default assets based on configuration
-        build_default_assets_bin()
-        esptool_py_flash_to_partition(flash "assets" "${GENERATED_ASSETS_LOCAL_FILE}")
-        message(STATUS "Generated default assets flash configured: ${GENERATED_ASSETS_LOCAL_FILE} -> assets partition")
-    elseif(CONFIG_FLASH_CUSTOM_ASSETS)
-        # Flash custom assets
-        get_assets_local_file("${CONFIG_CUSTOM_ASSETS_FILE}" ASSETS_LOCAL_FILE)
-        esptool_py_flash_to_partition(flash "assets" "${ASSETS_LOCAL_FILE}")
-        message(STATUS "Custom assets flash configured: ${ASSETS_LOCAL_FILE} -> assets partition")
-    elseif(CONFIG_FLASH_EXPRESSION_ASSETS)
-        set(ASSETS_NAME "expression_assets")
-        set(ASSETS_PARTITION "assets")
-        set(ASSETS_FILE "${CMAKE_BINARY_DIR}/${ASSETS_NAME}.bin")
-
-        build_speaker_assets_bin("${ASSETS_PARTITION}" ${EMOTE_RESOLUTION} ${ASSETS_FILE} ${CONFIG_MMAP_FILE_NAME_LENGTH})
-        message(STATUS "Generated emote assets: ${ASSETS_FILE} -> ${ASSETS_PARTITION} partition")
-        esptool_py_flash_to_partition(flash "${ASSETS_PARTITION}" "${ASSETS_FILE}")
-    elseif(CONFIG_FLASH_NONE_ASSETS)
-        message(STATUS "Assets flashing disabled (FLASH_NONE_ASSETS)")
-    endif()
+if(CONFIG_FLASH_NONE_ASSETS)
+    message(STATUS "StackChan: mmap SPIFFS assets disabled — Launcher UI falls back to embedded + optional LittleFS (userdata)")
 else()
-    message(STATUS "Assets partition not found, using v1 partition table")
+    message(STATUS "StackChan: mmap SPIFFS `assets` partition enabled (FLASH_DEFAULT_* / CUSTOM) + embedded/LittleFS fallbacks")
 endif()
