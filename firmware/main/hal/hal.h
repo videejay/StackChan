@@ -198,6 +198,9 @@ public:
     void setBackLightBrightness(uint8_t brightness, bool permanent = false);
     uint8_t getBackLightBrightness();
 
+    /** Optional camera fill/indicator LED for MCP photo tool; no-op if HW not present. */
+    void setCameraLedActive(bool active, uint32_t duration_ms = 0);
+
     /* --------------------------------- Xiaozhi -------------------------------- */
     void requestXiaozhiStart()
     {

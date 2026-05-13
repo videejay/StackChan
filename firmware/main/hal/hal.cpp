@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "stackchan_asset_provider.hpp"
 #include <memory>
 #include <mooncake_log.h>
 #include <nvs_flash.h>
@@ -32,6 +33,8 @@ void Hal::init()
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    stackchan_assets::early_init_launcher_assets();
 
     xiaozhi_board_init();
     xiaozhi_mcp_init();
@@ -263,6 +266,13 @@ void Hal::setBackLightBrightness(uint8_t brightness, bool permanent)
 uint8_t Hal::getBackLightBrightness()
 {
     return hal_bridge::board_get_backlight_brightness();
+}
+
+void Hal::setCameraLedActive(bool active, uint32_t duration_ms)
+{
+    (void)active;
+    (void)duration_ms;
+    /* CoreS3 StackChan: no separate camera LED in HAL yet; MCP still works without this. */
 }
 
 void Hal::setSpeakerVolume(uint8_t volume, bool permanent)
