@@ -158,5 +158,6 @@ void Hal::head_touch_init()
     si12t_init(&si12t_cfg, &si12t);
     si12t_setup(si12t, SI12T_TYPE_LOW, SI12T_SENSITIVITY_LEVEL_3);
 
-    xTaskCreateWithCaps(_head_touch_update_task, "headtouch", 1024 * 6, si12t, 5, NULL, MALLOC_CAP_SPIRAM);
+    // Stack must live in internal DRAM (not PSRAM): xPortcheckValidStackMem rejects PSRAM stacks.
+    xTaskCreate(_head_touch_update_task, "headtouch", 1024 * 6, si12t, 5, nullptr);
 }

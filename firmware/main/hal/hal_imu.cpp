@@ -53,5 +53,5 @@ void Hal::imu_init()
     }
     mclog::tagInfo(_tag, "BMI270 init ok");
 
-    xTaskCreateWithCaps(_imu_task, "imu", 4096, NULL, 5, NULL, MALLOC_CAP_SPIRAM);
+    xTaskCreate(_imu_task, "imu", 4096, nullptr, 5, nullptr);
 }
