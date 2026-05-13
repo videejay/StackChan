@@ -6,6 +6,7 @@
 #pragma once
 #include "elements/key_elements.h"
 #include "decorator.h"
+#include <smooth_lvgl.hpp>
 #include <memory>
 #include <smooth_lvgl.hpp>
 
@@ -109,7 +110,7 @@ public:
     {
         return _is_modify_locked;
     }
-
+    /** LVGL panel (null if skin has no clickable panel) */
     virtual uitk::lvgl_cpp::Container* getPanel() const
     {
         return nullptr;
