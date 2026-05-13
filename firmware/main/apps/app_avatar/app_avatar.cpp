@@ -83,10 +83,10 @@ void AppAvatar::onOpen()
     // Destroy loading page
     loading_page.reset();
 
-    // Create default avatar
-    auto avatar = std::make_unique<avatar::DefaultAvatar>();
-    avatar->init(lv_screen_active());
-    GetStackChan().attachAvatar(std::move(avatar));
+    // Create default avatar (avoid naming it `avatar` — StackChan::avatar() returns Avatar& and must use `.`, not `->`)
+    auto avatar_unique = std::make_unique<avatar::DefaultAvatar>();
+    avatar_unique->init(lv_screen_active());
+    GetStackChan().attachAvatar(std::move(avatar_unique));
 
     /* ------------------------------- BLE events ------------------------------- */
     GetHAL().onBleAvatarData.connect([&](const char* data) {

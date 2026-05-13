@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: MIT
 """Generate embedded fallback blobs for Launcher UI icons (embedded in flash).
 
-Reads files from assets_bin when present; otherwise emits minimal placeholders:
-- *.bin files: LVGL v9 lv_image_header_t (RGB565) + 1x1 pixel payload
-  (compatible with StackChan assets::get_image .bin parsing)
+Reads files from assets_bin when present; otherwise emits visible placeholders:
+- *.bin files: LVGL v9 lv_image_header_t (RGB565) + solid-fill bitmap (default 48×48).
+  Under Launcher there is usually no `userdata` LittleFS partition, so embedded fallbacks are used—
+  1×1 placeholders looked like “missing icons”; larger placeholders stay recognizable until you add real assets.
 - *.png files: canonical minimal 1×1 PNG
 """
 from __future__ import annotations
@@ -114,20 +115,36 @@ MINI_PNG_1X1 = bytes(
 )
 
 
-def _lvgl_rgb565_placeholder() -> bytes:
+def _lvgl_rgb565_bin(w: int, h: int, rgb565_word: int) -> bytes:
+    """LVGL v9 binary image: header + RGB565 pixels (native LE uint16 per pixel)."""
     magic = LV_IMAGE_HEADER_MAGIC
     cf = LV_COLOR_FORMAT_RGB565
     flags = 0
-    w = 1
-    h = 1
-    stride = 2
+    stride = w * 2
     reserved2 = 0
     hdr = struct.pack("<I", magic | (cf << 8) | (flags << 16))
     hdr += struct.pack("<I", w | (h << 16))
     hdr += struct.pack("<I", stride | (reserved2 << 16))
-    # opaque magenta-ish pixel RGB565 for visibility if shown
-    pixel = bytes([0xF8, 0x1F])
-    return hdr + pixel
+    pixel_le = struct.pack("<H", rgb565_word & 0xFFFF)
+    row = pixel_le * w
+    pixels = row * h
+    return hdr + pixels
+
+
+def _rgb565_word_for_fname(fname: str) -> int:
+    """Distinct saturated-ish RGB565 per filename."""
+    s = sum(ord(c) for c in fname)
+    x = (s * 7919) ^ (len(fname) * 65537)
+    r5 = (x >> 10) & 0x1F
+    g6 = (x >> 5) & 0x3F
+    b5 = x & 0x1F
+    if r5 + g6 + b5 < 10:
+        return 0xF81F  # magenta if too dark
+    return (r5 << 11) | (g6 << 5) | b5
+
+
+def _lvgl_rgb565_placeholder(fname: str) -> bytes:
+    return _lvgl_rgb565_bin(48, 48, _rgb565_word_for_fname(fname))
 
 
 def _load_or_placeholder(assets_bin: Path, fname: str) -> bytes:
@@ -138,7 +155,7 @@ def _load_or_placeholder(assets_bin: Path, fname: str) -> bytes:
     if lower.endswith(".png"):
         return MINI_PNG_1X1
     if lower.endswith(".bin"):
-        return _lvgl_rgb565_placeholder()
+        return _lvgl_rgb565_placeholder(fname)
     raise ValueError(f"unsupported asset extension: {fname}")
 
 
