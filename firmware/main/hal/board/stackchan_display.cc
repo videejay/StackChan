@@ -314,7 +314,9 @@ void StackChanAvatarDisplay::SetupUI()
 
     // GetHAL().startStackChanAutoUpdate(24);
 
-    FaceDetector::getInstance().start();
+    if (GetHAL().getXiaozhiConfig().faceDetectionEnabled) {
+        FaceDetector::getInstance().start();
+    }
 
     ESP_LOGI(TAG, "Avatar created and started");
 }
@@ -422,6 +424,18 @@ void StackChanAvatarDisplay::SetEmotion(const char* emotion)
         avatar.removeDecorator(love_decorator_id_);
         love_decorator_id_ = avatar.addDecorator(
             std::make_unique<HeartDecorator>(lv_screen_active(), 4000, 500));
+    } else if (strcmp(emotion, "microchip_ai") == 0) {
+        avatar.setEmotion(Emotion::Doubt);
+    } else if (strcmp(emotion, "cloud_slash") == 0) {
+        avatar.setEmotion(Emotion::Sad);
+        set_left_leds(40, 20, 0);
+    } else if (strcmp(emotion, "circle_xmark") == 0) {
+        avatar.setEmotion(Emotion::Sad);
+        set_left_leds(60, 0, 0);
+    } else if (strcmp(emotion, "speaking") == 0) {
+        avatar.setEmotion(Emotion::Happy);
+    } else if (strcmp(emotion, "connecting") == 0) {
+        avatar.setEmotion(Emotion::Doubt);
     } else {
         // Brief magenta pip on the left ring is a visible signal that an
         // unrecognised emotion arrived — otherwise this branch is silent and
@@ -560,8 +574,11 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
     // called from OTA/version checks while TLS handshakes run; lazy ESP-DL
     // allocations here starve esp-aes / lwIP internal RAM (see heap-tls plan).
     const DeviceState device_state = Application::GetInstance().GetDeviceState();
-    if (!is_sleeping_ && device_state != kDeviceStateStarting && device_state != kDeviceStateActivating) {
+    const bool det_enabled         = GetHAL().getXiaozhiConfig().faceDetectionEnabled;
+    if (det_enabled && !is_sleeping_ && device_state != kDeviceStateStarting && device_state != kDeviceStateActivating) {
         FaceDetector::getInstance().setEnabled(true);
+    } else if (!det_enabled) {
+        FaceDetector::getInstance().setEnabled(false);
     }
 
     // Phase 3 — face_tracking + idle_motion stay alive across LISTENING /

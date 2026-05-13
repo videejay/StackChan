@@ -74,6 +74,16 @@ idf.py erase-flash flash
 
 Then restore SPIFFS / `generated_assets.bin` if you use Launcher (see above).
 
+### `esp_littlefs: partition "userdata" could not be found`
+
+[partitions.csv](partitions.csv) defines a **`userdata`** LittleFS partition for Launcher UI assets. If the flash was never written with this table (old image or partial flash), mount fails. Fix: **erase flash and full re-flash** with this project’s partition table:
+
+```bash
+idf.py erase-flash flash
+```
+
+Erasing clears **NVS** (Wi‑Fi, xiaozhi settings). Restore SPIFFS / `generated_assets.bin` if you use Launcher.
+
 ### Serial: `WARM_REBOOT` / warm reboot loop
 
 `requestWarmReboot` logs `WARM_REBOOT` plus the target app index. If you see this without intending to leave xiaozhi, check accidental **home** button taps (debounced 2s) or other callers of `requestWarmReboot`.

@@ -356,6 +356,25 @@ private:
  * @brief
  *
  */
+class FaceDetectionToggleWorker : public WorkerBase {
+public:
+    FaceDetectionToggleWorker();
+    void update() override;
+
+private:
+    std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label_title;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label_hint;
+    std::unique_ptr<uitk::lvgl_cpp::Switch> _switch;
+    std::unique_ptr<uitk::lvgl_cpp::Button> _btn_confirm;
+    XiaozhiConfig_t _config;
+    bool _confirm_flag = false;
+};
+
+/**
+ * @brief
+ *
+ */
 class TimezoneWorker : public WorkerBase {
 public:
     TimezoneWorker();

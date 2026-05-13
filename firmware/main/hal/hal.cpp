@@ -9,6 +9,7 @@
 #include <memory>
 #include <mooncake_log.h>
 #include <nvs_flash.h>
+#include <stackchan/heap_stats_logger.h>
 #include <stackchan/privacy/privacy_leds.h>
 
 static std::unique_ptr<Hal> _hal_instance;
@@ -46,6 +47,8 @@ void Hal::init()
     imu_init();
     servo_init();
     lvgl_init();
+
+    stackchan::diag::start_heap_stats_logger();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -215,6 +218,7 @@ XiaozhiConfig_t Hal::getXiaozhiConfig()
         .idleShutdownTimeSeconds   = bridge_config.idleShutdownTimeSeconds,
         .allowShutdownWhenCharging = bridge_config.allowShutdownWhenCharging,
         .idleRandomMovementLevel   = bridge_config.idleRandomMovementLevel,
+        .faceDetectionEnabled      = bridge_config.faceDetectionEnabled,
     };
 }
 
@@ -224,6 +228,7 @@ void Hal::setXiaozhiConfig(XiaozhiConfig_t config)
         .idleShutdownTimeSeconds   = config.idleShutdownTimeSeconds,
         .allowShutdownWhenCharging = config.allowShutdownWhenCharging,
         .idleRandomMovementLevel   = config.idleRandomMovementLevel,
+        .faceDetectionEnabled      = config.faceDetectionEnabled,
     });
 }
 

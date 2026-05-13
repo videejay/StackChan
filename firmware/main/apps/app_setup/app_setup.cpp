@@ -92,6 +92,15 @@ void AppSetup::onOpen()
               }}},
         },
         {
+            "Privacy",
+            {{"Face Detection",
+              [&]() {
+                  _destroy_menu    = true;
+                  _need_warm_reset = true;
+                  _worker          = std::make_unique<FaceDetectionToggleWorker>();
+              }}},
+        },
+        {
             "Hardware Test",
             {{"Servo",
               [&]() {

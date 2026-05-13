@@ -178,14 +178,14 @@ void FaceTrackingModifier::_update(Modifiable& stackchan)
     }
 
     // ---- Phase 0 instrumentation: window emit ---------------------------
-    // One ESP_LOGI line per ~5 s window, then reset counters. Format
+    // One ESP_LOGD line per ~5 s window, then reset counters. Format
     // documented in probes/face-tracking-naturalness.md §3.
     uint32_t window_age = now - _phase0_window_start_ms;
     if (window_age >= kPhase0WindowMs) {
         float det_pct   = _phase0_samples ? (100.0f * _phase0_det / _phase0_samples) : 0.0f;
         float fps       = window_age      ? (1000.0f * _phase0_unique_frames / window_age) : 0.0f;
         float track_pct = window_age      ? (100.0f * _phase0_track_ms / window_age) : 0.0f;
-        ESP_LOGI(TAG,
+        ESP_LOGD(TAG,
             "phase0 win_ms=%u samples=%u det=%u (%.1f%%) fps=%.1f track_ms=%u (%.1f%%) cmd=%u",
             (unsigned)window_age,
             (unsigned)_phase0_samples,
