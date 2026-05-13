@@ -17,6 +17,7 @@
 #include <stackchan/stackchan.h>
 #include <stackchan/face/face_detector.h>
 #include <stackchan/sound_localizer.h>
+#include <stackchan/avatar/avatar_factory.h>
 #include <stackchan/avatar/decorators/decorators.h>
 #include "application.h"
 #include <assets/lang_config.h>
@@ -292,8 +293,7 @@ void StackChanAvatarDisplay::SetupUI()
 
     ESP_LOGI(TAG, "Creating Stack-chan Avatar...");
 
-    auto avatar = std::make_unique<DefaultAvatar>();
-    avatar->init(lv_screen_active());
+    auto avatar = createConfiguredAvatar(lv_screen_active());
     avatar->getPanel()->onClick().connect([]() {
         if (hal_bridge::is_xiaozhi_ready()) {
             hal_bridge::toggle_xiaozhi_chat_state();
