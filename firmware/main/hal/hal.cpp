@@ -268,13 +268,6 @@ uint8_t Hal::getBackLightBrightness()
     return hal_bridge::board_get_backlight_brightness();
 }
 
-void Hal::setCameraLedActive(bool active, uint32_t duration_ms)
-{
-    (void)active;
-    (void)duration_ms;
-    /* CoreS3 StackChan: no separate camera LED in HAL yet; MCP still works without this. */
-}
-
 void Hal::setSpeakerVolume(uint8_t volume, bool permanent)
 {
     hal_bridge::board_set_speaker_volume(volume, permanent);

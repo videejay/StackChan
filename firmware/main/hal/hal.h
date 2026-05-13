@@ -198,7 +198,7 @@ public:
     void setBackLightBrightness(uint8_t brightness, bool permanent = false);
     uint8_t getBackLightBrightness();
 
-    /** Optional camera fill/indicator LED for MCP photo tool; no-op if HW not present. */
+    /** MCP camera indicator on RGB ring (non-privacy LEDs); timer auto-off when duration_ms > 0. */
     void setCameraLedActive(bool active, uint32_t duration_ms = 0);
 
     /* --------------------------------- Xiaozhi -------------------------------- */
@@ -235,8 +235,6 @@ public:
     void setRgbColor(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
     void showRgbColor(uint8_t r, uint8_t g, uint8_t b);
     void refreshRgb();
-    /** Warm-red pulse on non-privacy right-ring LEDs while camera explain/upload runs. */
-    void setCameraLedActive(bool active, uint32_t duration_ms = 0);
 
     /* ---------------------------------- Power --------------------------------- */
     void setServoPowerEnabled(bool enabled);

@@ -420,5 +420,8 @@ endforeach()
     endif()
 endif()
 
-# StackChan Launcher: UI icons are embedded (gen script) / optional LittleFS — no mmap `assets.bin` flash.
-message(STATUS "StackChan: mmap assets.bin flashing disabled — use embedded + optional LittleFS (userdata)")
+if(CONFIG_FLASH_NONE_ASSETS)
+    message(STATUS "StackChan: mmap SPIFFS assets disabled — Launcher UI falls back to embedded + optional LittleFS (userdata)")
+else()
+    message(STATUS "StackChan: mmap SPIFFS `assets` partition enabled (FLASH_DEFAULT_* / CUSTOM) + embedded/LittleFS fallbacks")
+endif()
