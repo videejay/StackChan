@@ -20,6 +20,7 @@
 #include <stackchan/avatar/avatar_factory.h>
 #include <stackchan/avatar/decorators/decorators.h>
 #include "application.h"
+#include "device_state.h"
 #include <assets/lang_config.h>
 #include <hal/hal.h>
 
@@ -554,7 +555,12 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
     // disable in everything else) silently killed walk-up greetings
     // whenever the device missed the transition back to STANDBY,
     // because face_detected events stopped reaching the bridge.
-    if (!is_sleeping_) {
+    //
+    // Do NOT enable inference during Starting/Activating: SetStatus() is
+    // called from OTA/version checks while TLS handshakes run; lazy ESP-DL
+    // allocations here starve esp-aes / lwIP internal RAM (see heap-tls plan).
+    const DeviceState device_state = Application::GetInstance().GetDeviceState();
+    if (!is_sleeping_ && device_state != kDeviceStateStarting && device_state != kDeviceStateActivating) {
         FaceDetector::getInstance().setEnabled(true);
     }
 

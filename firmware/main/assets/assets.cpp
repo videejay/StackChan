@@ -25,7 +25,7 @@ lv_image_dsc_t get_image(std::string_view name)
     const uint8_t* raw = nullptr;
     std::size_t raw_len = 0;
 
-    // LittleFS overrides (Launcher) then embedded flash fallback — no mmap assets partition.
+    // StackChan UI: LittleFS userdata + embedded fallbacks (xiaozhi SPIFFS `assets` is separate / mmap).
     if (!stackchan_assets::get_launcher_ui_asset_bytes(name, &raw, &raw_len)) {
         return dsc;
     }

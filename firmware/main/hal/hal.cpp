@@ -5,6 +5,7 @@
  */
 #include "hal.h"
 #include "stackchan_asset_provider.hpp"
+#include <esp_log.h>
 #include <memory>
 #include <mooncake_log.h>
 #include <nvs_flash.h>
@@ -331,6 +332,8 @@ static std::string_view _warm_boot_nvs_key = "app_index";
 void Hal::requestWarmReboot(int appIndex)
 {
     mclog::tagInfo(_tag, "warm reboot request to app index: {}", appIndex);
+    // Duplicate on ESP_LOG so serial captures always show the trigger (e.g. home vs other paths).
+    ESP_LOGI("WARM_REBOOT", "requestWarmReboot app_index=%d (see HAL tag for mooncake_log)", appIndex);
 
     {
         Settings settings(_warm_boot_nvs_ns.data(), true);

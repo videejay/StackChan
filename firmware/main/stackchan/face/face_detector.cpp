@@ -59,6 +59,28 @@ static constexpr size_t RGB_BUF_SIZE = FRAME_W * FRAME_H * 3;
 static constexpr float kMsrScoreThr = 0.40f;  // was 0.25f — raise to skip MNP more often
 static constexpr float kMnpScoreThr = 0.30f;  // unchanged
 
+namespace {
+
+// Constructed in FaceDetector::start() so model + ESP-DL working buffers are
+// allocated before WiFi/TLS, not on the first frame during OTA handshakes.
+HumanFaceDetect* g_human_face_detector    = nullptr;
+bool             g_human_face_configured = false;
+
+void ensure_human_face_detector_initialized()
+{
+    if (!g_human_face_detector) {
+        g_human_face_detector = new HumanFaceDetect();
+    }
+    if (!g_human_face_configured) {
+        g_human_face_detector->set_score_thr(kMsrScoreThr, 0);  // MSR (stage 1)
+        g_human_face_detector->set_score_thr(kMnpScoreThr, 1);    // MNP (stage 2)
+        g_human_face_configured = true;
+        ESP_LOGI(TAG, "Detector configured: MSR thr=%.2f, MNP thr=%.2f", kMsrScoreThr, kMnpScoreThr);
+    }
+}
+
+}  // namespace
+
 namespace stackchan {
 
 FaceDetector& FaceDetector::getInstance()
@@ -92,6 +114,8 @@ void FaceDetector::start()
     if (!FaceRecognizer::getInstance().init()) {
         ESP_LOGW(TAG, "FaceRecognizer init returned false (degraded mode)");
     }
+
+    ensure_human_face_detector_initialized();
 
     xTaskCreatePinnedToCore(taskEntry, "face_det", 16384, this, 1, &_task_handle, 0);
     ESP_LOGI(TAG, "Face detector task started on Core 0");
@@ -213,17 +237,11 @@ void FaceDetector::processFrame()
         return;
     }
 
-    // Defaults (0.5/0.5) are too strict for real-world conditions
-    // (kid faces, poor lighting). See kMsrScoreThr / kMnpScoreThr at the
-    // top of this file for tuning rationale.
-    static HumanFaceDetect detector;
-    static bool detector_configured = false;
-    if (!detector_configured) {
-        detector.set_score_thr(kMsrScoreThr, 0);  // MSR (stage 1)
-        detector.set_score_thr(kMnpScoreThr, 1);  // MNP (stage 2)
-        detector_configured = true;
-        ESP_LOGI(TAG, "Detector configured: MSR thr=%.2f, MNP thr=%.2f",
-                 kMsrScoreThr, kMnpScoreThr);
+    // Detector + thresholds: initialized in start() via ensure_human_face_detector_initialized().
+    ensure_human_face_detector_initialized();
+    if (!g_human_face_detector) {
+        arbiter.releaseForDetection();
+        return;
     }
 
     dl::image::img_t img = {
@@ -232,7 +250,7 @@ void FaceDetector::processFrame()
         .height   = (uint16_t)frame_h,
         .pix_type = pix_type,
     };
-    auto& results = detector.run(img);
+    auto& results = g_human_face_detector->run(img);
     arbiter.releaseForDetection();
 
     auto& result = GetFaceDetectionResult();

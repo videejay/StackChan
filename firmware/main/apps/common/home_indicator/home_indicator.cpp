@@ -11,6 +11,7 @@
 #include <smooth_lvgl.hpp>
 #include <assets/assets.h>
 #include <hal/hal.h>
+#include <esp_log.h>
 #include <memory>
 #include <lvgl.h>
 
@@ -242,11 +243,22 @@ private:
     void check_go_home()
     {
         if (_home_button->isClicked()) {
+            const uint32_t now = GetHAL().millis();
+            // Debounce accidental double-taps / noisy touch (avoids esp_restart loop back to launcher).
+            if (_last_go_home_ms != 0 && (now - _last_go_home_ms) < 2000) {
+                ESP_LOGW("HomeIndicator",
+                         "go home ignored (debounce %ums since last)",
+                         (unsigned)(now - _last_go_home_ms));
+                return;
+            }
+            _last_go_home_ms = now;
             if (onGoHome) {
                 onGoHome();
             }
         }
     }
+
+    uint32_t _last_go_home_ms = 0;
 };
 
 /**

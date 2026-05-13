@@ -61,3 +61,19 @@ Do this **in addition** after the app is installed:
 Separate from **`generated_assets.bin`**: UI icons and backgrounds can use **embedded fallbacks** (build time) and optional overrides from **LittleFS** (defaults: mount `/launcherfs`, partition label `userdata`) or SD—see `main/assets/assets_bin/README.md`.
 
 Run `idf.py reconfigure` after pulling — the `joltwallet/littlefs` component is required for optional LittleFS mounting.
+
+## Troubleshooting
+
+### `esp_ota_ops: not found otadata` / wrong partition labels (e.g. `app1` vs `ota_0`)
+
+The flash layout must match [partitions.csv](partitions.csv). A device flashed with an older or different table can run an app but fail OTA state queries. Fix: **full re-flash** so bootloader + partition table + app align:
+
+```bash
+idf.py erase-flash flash
+```
+
+Then restore SPIFFS / `generated_assets.bin` if you use Launcher (see above).
+
+### Serial: `WARM_REBOOT` / warm reboot loop
+
+`requestWarmReboot` logs `WARM_REBOOT` plus the target app index. If you see this without intending to leave xiaozhi, check accidental **home** button taps (debounced 2s) or other callers of `requestWarmReboot`.
