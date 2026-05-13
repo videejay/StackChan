@@ -25,6 +25,7 @@ WifiSetupWorker::WifiSetupWorker()
     _last_state  = State::None;
     _is_first_in = true;
 
+    // Create avatar (eyes/mouth visibility customized below)
     auto avatar = avatar::createConfiguredAvatar(lv_screen_active(), &lv_font_montserrat_24);
     avatar->leftEye().setVisible(false);
     avatar->rightEye().setVisible(false);
