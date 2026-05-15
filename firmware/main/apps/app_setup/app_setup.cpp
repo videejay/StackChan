@@ -69,6 +69,11 @@ void AppSetup::onOpen()
                   _destroy_menu = true;
                   _worker       = std::make_unique<TimezoneWorker>();
               }},
+             {"Clock Format",
+              [&]() {
+                  _destroy_menu = true;
+                  _worker       = std::make_unique<ClockFormatWorker>();
+              }},
              {"Avatar Skin",
               [&]() {
                   _destroy_menu    = true;

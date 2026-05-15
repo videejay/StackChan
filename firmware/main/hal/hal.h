@@ -270,6 +270,8 @@ public:
     void syncSystemTimeToRtc();
     void setTimezone(std::string_view tz);
     std::string getTimezone();
+    void setClockFormat(std::string_view fmt);
+    std::string getClockFormat();
 
     /* --------------------------------- EspNow --------------------------------- */
     uitk::Signal<const std::vector<uint8_t>&> onEspNowData;

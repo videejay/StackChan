@@ -34,6 +34,18 @@ static const std::vector<TimezoneOption_t> _timezone_list = {
     {"Tokyo (UTC+9)", "JST-9"},       {"Sydney (UTC+10)", "AEST-10"},      {"Noumea (UTC+11)", "SBT-11"},
     {"Auckland (UTC+12)", "NZST-12"}, {"Fiji (UTC+13)", "FJT-13"},         {"Line Islands (UTC+14)", "LINT-14"}};
 
+struct ClockFormatOption_t {
+    std::string name;
+    std::string key;
+};
+
+static const std::vector<ClockFormatOption_t> _clock_format_list = {
+    {"24h - 14:23", "24h_hm"},
+    {"12h - 2:23 PM", "12h_hm_ampm"},
+    {"24h - 14:23:45", "24h_hms"},
+    {"24h + Date", "24h_hm_date"},
+};
+
 VolumeSetupWorker::VolumeSetupWorker()
 {
     mclog::info("VolumeSetupWorker start");
@@ -200,6 +212,89 @@ void TimezoneWorker::update()
         _is_done = true;
     }
 }
+
+ClockFormatWorker::ClockFormatWorker()
+{
+    _panel = std::make_unique<uitk::lvgl_cpp::Container>(lv_screen_active());
+    _panel->setPadding(0, 0, 0, 0);
+    _panel->setBgColor(lv_color_hex(0xEDF4FF));
+    _panel->align(LV_ALIGN_CENTER, 0, 0);
+    _panel->setBorderWidth(0);
+    _panel->setSize(320, 240);
+    _panel->setRadius(0);
+
+    _label = std::make_unique<uitk::lvgl_cpp::Label>(_panel->get());
+    _label->setText("Clock Format");
+    _label->setTextFont(&lv_font_montserrat_16);
+    _label->setTextColor(lv_color_hex(0x26206A));
+    _label->align(LV_ALIGN_CENTER, 0, -100);
+
+    std::string options;
+    for (const auto& cf : _clock_format_list) {
+        options += cf.name + "\n";
+    }
+    if (!options.empty()) {
+        options.pop_back();
+    }
+
+    _roller = std::make_unique<uitk::lvgl_cpp::Roller>(_panel->get());
+    _roller->setSize(210, 188);
+    _roller->setOptions(options.c_str());
+    _roller->align(LV_ALIGN_CENTER, -40, 16);
+    _roller->setTextFont(&lv_font_montserrat_16);
+    _roller->setTextColor(lv_color_hex(0x26206A));
+    _roller->setBgColor(lv_color_hex(0xB8D3FD));
+    _roller->setRadius(18);
+    _roller->setShadowWidth(0);
+    _roller->setBorderWidth(0);
+    _roller->setBgColor(lv_color_hex(0x615B9E), LV_PART_SELECTED);
+
+    std::string current_fmt = GetHAL().getClockFormat();
+    bool matched            = false;
+    for (size_t i = 0; i < _clock_format_list.size(); ++i) {
+        if (current_fmt == _clock_format_list[i].key) {
+            _roller->setSelected(i, LV_ANIM_OFF);
+            matched = true;
+            break;
+        }
+    }
+    if (!matched && !_clock_format_list.empty()) {
+        _roller->setSelected(0, LV_ANIM_OFF);
+    }
+
+    _btn_confirm = std::make_unique<uitk::lvgl_cpp::Button>(_panel->get());
+    _btn_confirm->label().setText("ok");
+    _btn_confirm->label().setTextFont(&lv_font_montserrat_24);
+    _btn_confirm->setSize(60, 110);
+    _btn_confirm->align(LV_ALIGN_CENTER, 115, 40);
+    _btn_confirm->onClick().connect([&]() { _confirm_flag = true; });
+    _btn_confirm->setRadius(18);
+    _btn_confirm->setShadowWidth(0);
+    _btn_confirm->setBgColor(lv_color_hex(0x615B9E));
+}
+
+ClockFormatWorker::~ClockFormatWorker()
+{
+}
+
+void ClockFormatWorker::update()
+{
+    if (_confirm_flag) {
+        _confirm_flag = false;
+
+        uint16_t selected_id = _roller->getSelected();
+        if (selected_id < _clock_format_list.size()) {
+            const auto& sel = _clock_format_list[selected_id];
+            GetHAL().setClockFormat(sel.key);
+
+            view::pop_a_toast("Clock Format Set", view::ToastType::Success);
+            mclog::tagInfo(_tag, "clock_format set to: {}", sel.key);
+        }
+
+        _is_done = true;
+    }
+}
+
 
 AvatarSkinWorker::AvatarSkinWorker()
 {
