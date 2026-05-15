@@ -371,6 +371,23 @@ private:
 };
 
 /**
+ * @brief Screensaver clock layout (NVS key persisted via Hal)
+ */
+class ClockFormatWorker : public WorkerBase {
+public:
+    ClockFormatWorker();
+    ~ClockFormatWorker();
+    void update() override;
+
+private:
+    std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
+    std::unique_ptr<uitk::lvgl_cpp::Roller> _roller;
+    std::unique_ptr<uitk::lvgl_cpp::Button> _btn_confirm;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label;
+    bool _confirm_flag = false;
+};
+
+/**
  * @brief
  *
  */
