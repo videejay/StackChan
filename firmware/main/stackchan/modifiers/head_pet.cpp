@@ -7,6 +7,7 @@
 #include "../avatar/decorators/decorators.h"
 #include "../utils/random.h"
 #include <hal/hal.h>
+#include <hal/drivers/mbot/mbot_client.h>
 #include "application.h"  // perception events + WakeWordInvoke
 #include <smooth_ui_toolkit.hpp>
 #include <memory>
@@ -21,6 +22,11 @@ namespace stackchan {
 //                   incidental pets.
 // ---------------------------------------------------------------------------
 static constexpr uint32_t kHoldToListenMs = 2000;
+static constexpr uint32_t kMbotHeartDurationMs = 5000;
+static constexpr uint8_t kHeartBitmap[]        = {
+    0b00000000, 0b01100110, 0b11111111, 0b11111111,
+    0b11111111, 0b01111110, 0b00111100, 0b00011000,
+};
 
 HeadPetModifier::HeadPetModifier(uint32_t restoreDelayMs) : _restore_delay_ms(restoreDelayMs)
 {
@@ -89,6 +95,8 @@ void HeadPetModifier::_update(Modifiable& stackchan)
         _is_waiting_restore = false;
         restore_original_state(stackchan);
     }
+
+    update_mbot_heart_feedback();
 }
 
 void HeadPetModifier::handle_swipe(Modifiable& stackchan)
@@ -114,6 +122,16 @@ void HeadPetModifier::handle_swipe(Modifiable& stackchan)
     _heart_decorator_id =
         avatar.addDecorator(std::make_unique<avatar::HeartDecorator>(lv_screen_active(), duration, 500));
     _shy_decorator_id = avatar.addDecorator(std::make_unique<avatar::ShyDecorator>(lv_screen_active(), duration));
+
+    auto& mbot = MbotClient::GetInstance();
+    if (GetHAL().isMbotBodyMotionEnabled() && (mbot.isReady() || mbot.init())) {
+        mbot.playTone(523, 120);
+        mbot.setRgbLed(255, 0, 0);
+        mbot.displayBitmap(8, kHeartBitmap, sizeof(kHeartBitmap));
+        _mbot_heart_until_ms = GetHAL().millis() + kMbotHeartDurationMs;
+        _mbot_next_pulse_ms  = GetHAL().millis() + 180;
+        _mbot_heart_lit      = true;
+    }
 
     // Motion feedback
     perform_pet_motion(stackchan);
@@ -171,6 +189,32 @@ void HeadPetModifier::flashWakeFeedback(Modifiable& stackchan)
     // enough; the listen-state LED policy in stackchan_display will repaint
     // immediately when the WS transitions to Listening.
     stackchan.leftNeonLight().setColor(0, 168, 0);
+}
+
+void HeadPetModifier::update_mbot_heart_feedback()
+{
+    if (!_mbot_heart_until_ms) {
+        return;
+    }
+
+    auto now  = GetHAL().millis();
+    auto& mbot = MbotClient::GetInstance();
+    if (now >= _mbot_heart_until_ms) {
+        if (mbot.isReady()) {
+            mbot.setRgbLed(0, 0, 0);
+            mbot.clearDisplay();
+        }
+        _mbot_heart_until_ms = 0;
+        _mbot_next_pulse_ms  = 0;
+        _mbot_heart_lit      = false;
+        return;
+    }
+
+    if (now >= _mbot_next_pulse_ms && mbot.isReady()) {
+        _mbot_heart_lit = !_mbot_heart_lit;
+        mbot.setRgbLed(_mbot_heart_lit ? 255 : 24, 0, 0);
+        _mbot_next_pulse_ms = now + (_mbot_heart_lit ? 220 : 120);
+    }
 }
 
 }  // namespace stackchan

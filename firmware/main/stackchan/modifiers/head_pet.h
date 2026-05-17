@@ -22,6 +22,7 @@ private:
     void restore_original_state(Modifiable& stackchan);
     void perform_pet_motion(Modifiable& stackchan);
     void flashWakeFeedback(Modifiable& stackchan);
+    void update_mbot_heart_feedback();
 
     size_t _signal_connection = 0;
 
@@ -32,6 +33,9 @@ private:
     bool _is_touched        = false;
     bool _hold_wake_fired   = false;
     uint32_t _touch_start_ms = 0;
+    uint32_t _mbot_heart_until_ms = 0;
+    uint32_t _mbot_next_pulse_ms  = 0;
+    bool _mbot_heart_lit          = false;
 
     bool _in_happy_state     = false;
     bool _is_waiting_restore = false;

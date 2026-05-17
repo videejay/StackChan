@@ -219,6 +219,14 @@ public:
     {
         return _xiaozhi_start_requested;
     }
+    void setMbotBodyMotionEnabled(bool enabled)
+    {
+        _mbot_body_motion_enabled = enabled;
+    }
+    bool isMbotBodyMotionEnabled() const
+    {
+        return _mbot_body_motion_enabled;
+    }
     void startXiaozhi();
     XiaozhiConfig_t getXiaozhiConfig();
     void setXiaozhiConfig(XiaozhiConfig_t config);
@@ -314,6 +322,7 @@ public:
 
 private:
     bool _xiaozhi_start_requested = false;
+    bool _mbot_body_motion_enabled = false;
 
     void xiaozhi_board_init();
     void lvgl_init();

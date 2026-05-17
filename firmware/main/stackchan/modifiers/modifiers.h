@@ -9,6 +9,7 @@
 #include "breath.h"
 #include "speaking.h"
 #include "head_pet.h"
+#include "body_motion.h"
 #include "idle_motion.h"
 #include "idle_expression.h"
 #include "face_tracking.h"
