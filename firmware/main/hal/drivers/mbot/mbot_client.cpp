@@ -47,9 +47,11 @@ bool MbotClient::init()
         ESP_LOGW(TAG, "Failed to add mBot I2C device");
         return false;
     }
-
-    ready_ = ping();
-    ESP_LOGI(TAG, "mBot client %s", ready_ ? "ready" : "not responding");
+    while(!ready_){
+        ready_ = ping();
+        ESP_LOGI(TAG, "mBot client %s", ready_ ? "ready" : "not responding");
+        lv_sleep_ms(5000);
+    }
     return ready_;
 }
 
@@ -60,37 +62,44 @@ bool MbotClient::isReady() const
 
 bool MbotClient::ping()
 {
+    ESP_LOGI(TAG, "mBot PING");
     return transact(0x06, nullptr, 0, nullptr, 0);
 }
 
 bool MbotClient::setMotors(int8_t left, int8_t right)
 {
+    ESP_LOGI(TAG, "mBot set Motors Left: %d - Right: %d", left, right);
     uint8_t payload[2] = {static_cast<uint8_t>(left), static_cast<uint8_t>(right)};
     return transact(0x01, payload, sizeof(payload), nullptr, 0);
 }
 
 bool MbotClient::stopMotors()
 {
+    ESP_LOGW(TAG, "mBot stopping motors");
     return transact(0x08, nullptr, 0, nullptr, 0);
 }
 
 bool MbotClient::getDistanceCm(uint16_t& distanceCm)
 {
     uint8_t payload[2] = {};
+    ESP_LOGI(TAG, "mBot distance requested");
     if (!transact(0x02, nullptr, 0, payload, sizeof(payload))) {
         return false;
     }
     distanceCm = static_cast<uint16_t>((payload[0] << 8) | payload[1]);
+    ESP_LOGI(TAG, "mBot distance received: %dcm", distanceCm);
     return true;
 }
 
 bool MbotClient::getLineFollower(uint8_t& state)
 {
     uint8_t payload[1] = {};
+    ESP_LOGI(TAG, "mBot line follower requested");
     if (!transact(0x0B, nullptr, 0, payload, sizeof(payload))) {
         return false;
     }
     state = payload[0];
+    ESP_LOGI(TAG, "mBot line follower response %d", state);
     return true;
 }
 
@@ -100,12 +109,14 @@ bool MbotClient::displayText(const char* text)
         return false;
     }
     const auto len = static_cast<uint8_t>(std::min<size_t>(std::strlen(text), kMaxPayload));
+    ESP_LOGI(TAG, "mBot text send %s with len: %d", text, len);
     return transact(0x03, reinterpret_cast<const uint8_t*>(text), len, nullptr, 0);
 }
 
 bool MbotClient::setRgbLed(uint8_t r, uint8_t g, uint8_t b)
 {
     uint8_t payload[3] = {r, g, b};
+    ESP_LOGI(TAG, "mBot RGB LED command send R: %d G: %d B: %d", r,g,b);
     return transact(0x09, payload, sizeof(payload), nullptr, 0);
 }
 
@@ -117,6 +128,7 @@ bool MbotClient::playTone(uint16_t frequencyHz, uint16_t durationMs)
         static_cast<uint8_t>(durationMs >> 8),
         static_cast<uint8_t>(durationMs & 0xFF),
     };
+    ESP_LOGI(TAG, "mBot play tone Freq: %d Duration: %d", frequencyHz, durationMs);
     return transact(0x0A, payload, sizeof(payload), nullptr, 0);
 }
 
@@ -128,11 +140,13 @@ bool MbotClient::displayBitmap(uint8_t width, const uint8_t* bitmap, uint8_t bit
     std::array<uint8_t, kMaxPayload> payload = {};
     payload[0]                               = width;
     std::memcpy(payload.data() + 1, bitmap, bitmapLen);
+    ESP_LOGI(TAG, "mBot send bitmap - width: %d - len: %d ",width, bitmapLen);
     return transact(0x07, payload.data(), bitmapLen + 1, nullptr, 0);
 }
 
 bool MbotClient::clearDisplay()
 {
+    ESP_LOGI(TAG, "mBot clear display");
     return transact(0x04, nullptr, 0, nullptr, 0);
 }
 
