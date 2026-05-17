@@ -125,3 +125,16 @@ std::string Hal::getTimezone()
     Settings settings("system", false);
     return settings.GetString("tz", "GMT0");
 }
+
+void Hal::setClockFormat(std::string_view fmt)
+{
+    Settings settings("system", true);
+    settings.SetString("clock_format", std::string(fmt));
+    mclog::tagInfo(_tag, "clock_format updated to: {}", fmt);
+}
+
+std::string Hal::getClockFormat()
+{
+    Settings settings("system", false);
+    return settings.GetString("clock_format", "24h_hm");
+}

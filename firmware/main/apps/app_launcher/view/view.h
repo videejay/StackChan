@@ -12,6 +12,8 @@
 #include <functional>
 #include <vector>
 #include <memory>
+#include <string>
+#include <cstdint>
 
 namespace view {
 
@@ -63,13 +65,20 @@ public:
     void onLogoCollide(int logoGroupId) override;
 
 private:
+    void refreshClockUi();
+    void applyLabelColors();
+
     std::unique_ptr<uitk::lvgl_cpp::ScreenActive> _prev_screen;
     std::unique_ptr<uitk::lvgl_cpp::Screen> _screen;
     std::unique_ptr<uitk::lvgl_cpp::Container> _logo;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _left_eye;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _right_eye;
-    std::unique_ptr<uitk::lvgl_cpp::Container> _mouth;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _time_label;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _date_label;
+
+    std::string _clock_format_key;
+    int _logo_width  = 200;
+    int _logo_height = 60;
     int _color_index = 0;
+    uint32_t _last_clock_ms = 0;
 };
 
 }  // namespace view
