@@ -30,7 +30,7 @@ void BodyMotionModifier::_update(Modifiable& stackchan)
     next_update_ms_ = now + kUpdatePeriodMs;
 
     auto& mbot = MbotClient::GetInstance();
-    if (!mbot.isReady() && !mbot.init()) {
+    if (!mbot.isReady() && !mbot.tryConnectOnce()) {
         return;
     }
 

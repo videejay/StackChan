@@ -6,7 +6,9 @@
 #pragma once
 #include <lvgl.h>
 #include <cstdint>
+#include <functional>
 #include <smooth_lvgl.hpp>
+#include <string_view>
 #include <uitk/short_namespace.hpp>
 
 namespace view {
@@ -28,7 +30,7 @@ public:
         _msg->setTextAlign(LV_TEXT_ALIGN_CENTER);
         _msg->align(LV_ALIGN_CENTER, 0, 0);
         _msg->setText("");
-        _msg->setWidth(220);
+        _msg->setWidth(300);
     }
 
     void setMessage(std::string_view msg)
@@ -36,9 +38,33 @@ public:
         _msg->setText(msg);
     }
 
+    /** LV_EVENT_LONG_PRESSED on full-screen panel (for debug actions). */
+    void setOnLongPress(std::function<void()> cb);
+
 private:
+    static void onLongPressThunk(lv_event_t* e);
+
     std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
     std::unique_ptr<uitk::lvgl_cpp::Label> _msg;
+    std::function<void()> _long_press_cb;
 };
+
+inline void LoadingPage::onLongPressThunk(lv_event_t* e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_LONG_PRESSED) {
+        return;
+    }
+    auto* self = static_cast<LoadingPage*>(lv_event_get_user_data(e));
+    if (self && self->_long_press_cb) {
+        self->_long_press_cb();
+    }
+}
+
+inline void LoadingPage::setOnLongPress(std::function<void()> cb)
+{
+    _long_press_cb = std::move(cb);
+    lv_obj_add_flag(_panel->get(), LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(_panel->get(), onLongPressThunk, LV_EVENT_LONG_PRESSED, this);
+}
 
 }  // namespace view
