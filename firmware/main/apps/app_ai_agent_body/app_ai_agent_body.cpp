@@ -139,7 +139,7 @@ void AppAiAgentBody::onRunning()
         } else {
             loading_page_->setMessage(formatMbotLinkMessage(mbot.snapshot()));
             next_connect_attempt_ms_ = now + connect_backoff_ms_;
-            connect_backoff_ms_      = std::min(connect_backoff_ms_ * 2u, 5000u);
+            connect_backoff_ms_      = std::min<uint32_t>(connect_backoff_ms_ * 2U, 5000U);
         }
     }
 
