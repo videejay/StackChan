@@ -79,7 +79,7 @@ std::string formatMbotLinkMessage(const MbotClient::LinkStatus& s)
 AppAiAgentBody::AppAiAgentBody()
 {
     setAppInfo().name = "AI.BODY";
-    static auto icon  = assets::get_image("icon_ai_agent.bin");
+    static auto icon  = assets::get_image("icon_ai_robot.bin");
     setAppInfo().icon = (void*)&icon;
     static uint32_t theme_color = 0x33CC99;
     setAppInfo().userData       = (void*)&theme_color;
