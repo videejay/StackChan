@@ -8,6 +8,19 @@ Expected names (see `assets/tools/gen_launcher_embedded_assets.py`):
 
 - `icon_*.bin`, `app_center_bg.png`, `setup_stackchan_front_view.bin`, etc.
 
+### PNG ↔ LVGL `.bin`
+
+From this directory (`pip install pillow` once):
+
+```bash
+python convert.py icon_dance.png              # -> icon_dance.bin
+python convert.py icon_dance.bin              # -> icon_dance.png
+python convert.py icon_dance.png -o out.bin   # custom output path
+python convert.py icon_dance.bin --to png -o preview.png
+```
+
+Format: LVGL v9 header + **RGB565** or **RGB565A8** (LVGL image converter output). PNGs with transparency become RGB565A8; opaque PNGs become RGB565.
+
 ## LittleFS (Launcher)
 
 When `CONFIG_STACKCHAN_LITTLEFS_UI_ASSETS` is enabled, the device also looks for the same filenames under:
