@@ -39,6 +39,7 @@ MANIFEST = [
     "app_center_bg.png",
     "icon_app_center.bin",
     "icon_ai_agent.bin",
+    "icon_ai_robot.bin",
 ]
 
 # Canonical 67-byte 1×1 transparent PNG (from public-domain minimal PNG corpus).
