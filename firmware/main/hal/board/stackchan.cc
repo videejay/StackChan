@@ -238,6 +238,7 @@ private:
     static constexpr int kPowerStatePollIntervalMs   = 1000;
 
     i2c_master_bus_handle_t i2c_bus_;
+    i2c_master_bus_handle_t mbot_i2c_bus_ = nullptr;
     Pmic* pmic_;
     Aw9523* aw9523_;
     Ft6336* ft6336_;
@@ -323,6 +324,38 @@ private:
                 },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
+    }
+
+    void InitializeMbotI2c()
+    {
+        i2c_master_bus_config_t i2c_bus_cfg = {
+            .i2c_port          = (i2c_port_t)0,
+            .sda_io_num        = MBOT_I2C_SDA_PIN,
+            .scl_io_num        = MBOT_I2C_SCL_PIN,
+            .clk_source        = I2C_CLK_SRC_DEFAULT,
+            .glitch_ignore_cnt = 7,
+            .intr_priority     = 0,
+            .trans_queue_depth = 0,
+            .flags =
+                {
+                    .enable_internal_pullup = 1,
+                },
+        };
+        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &mbot_i2c_bus_));
+    }
+
+    void LogMbotPortAProbe()
+    {
+        if (!mbot_i2c_bus_) {
+            return;
+        }
+        constexpr uint8_t kMbotAddr = 0x10;
+        esp_err_t ret                 = i2c_master_probe(mbot_i2c_bus_, kMbotAddr, pdMS_TO_TICKS(200));
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Port A I2C (G2/G1): mBot probe 0x%02X OK", kMbotAddr);
+        } else {
+            ESP_LOGW(TAG, "Port A I2C (G2/G1): mBot probe 0x%02X failed: %s", kMbotAddr, esp_err_to_name(ret));
+        }
     }
 
     void I2cDetect()
@@ -500,6 +533,8 @@ public:
         InitializeAxp2101();
         InitializePowerSaveTimer();
         InitializeAw9523();
+        InitializeMbotI2c();
+        LogMbotPortAProbe();
         I2cDetect();
         InitializeSpi();
         InitializeIli9342Display();
@@ -559,6 +594,11 @@ public:
     {
         return i2c_bus_;
     }
+
+    i2c_master_bus_handle_t GetMbotI2cBus()
+    {
+        return mbot_i2c_bus_;
+    }
 };
 
 DECLARE_BOARD(M5StackCoreS3Board);
@@ -567,6 +607,12 @@ i2c_master_bus_handle_t hal_bridge::board_get_i2c_bus()
 {
     auto& board = (M5StackCoreS3Board&)Board::GetInstance();
     return board.GetI2cBus();
+}
+
+i2c_master_bus_handle_t hal_bridge::board_get_mbot_i2c_bus()
+{
+    auto& board = (M5StackCoreS3Board&)Board::GetInstance();
+    return board.GetMbotI2cBus();
 }
 
 StackChanCamera* hal_bridge::board_get_camera()

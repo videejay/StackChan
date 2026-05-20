@@ -9,10 +9,12 @@
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <hal/board/config.h>
 #include <hal/board/hal_bridge.h>
 
 namespace {
@@ -22,7 +24,9 @@ constexpr uint8_t kStartByte  = 0xAA;
 constexpr uint8_t kMaxPayload = 24;
 constexpr int kTimeoutMs      = 100;
 constexpr int kProbeTimeoutMs = 100;
-constexpr int kInterFrameDelayMs = 2;
+/** Full 128-address UI scan; keep moderate so long-press completes in a few seconds. */
+constexpr int kRescanProbeTimeoutMs = 45;
+constexpr int kInterFrameDelayMs = 5;
 
 void hexDumpToBuffer(const uint8_t* data, uint8_t len, char* out, size_t outSz)
 {
@@ -109,16 +113,16 @@ bool MbotClient::tryConnectOnce()
     link_.state      = LinkState::Probing;
     link_.lastReason = "";
 
-    auto bus = hal_bridge::board_get_i2c_bus();
+    auto bus = hal_bridge::board_get_mbot_i2c_bus();
     if (!bus) {
         link_.state      = LinkState::ProbeTimeout;
         link_.lastEspErr = ESP_FAIL;
-        link_.lastReason = "no_i2c_bus";
-        ESP_LOGW(TAG, "board_get_i2c_bus returned null");
+        link_.lastReason = "no_mbot_i2c_bus";
+        ESP_LOGW(TAG, "board_get_mbot_i2c_bus returned null (Port A G2/G1)");
         return false;
     }
 
-    ESP_LOGI(TAG, "Probing 0x%02X attempt=%u", kAddress, static_cast<unsigned>(link_.attempt));
+    ESP_LOGI(TAG, "Probing 0x%02X on Port A (G2/G1) attempt=%u", kAddress, static_cast<unsigned>(link_.attempt));
     esp_err_t probe = i2c_master_probe(bus, kAddress, pdMS_TO_TICKS(kProbeTimeoutMs));
     link_.lastEspErr = probe;
     if (probe != ESP_OK) {
@@ -135,7 +139,7 @@ bool MbotClient::tryConnectOnce()
     i2c_device_config_t cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address  = kAddress,
-        .scl_speed_hz    = 100 * 1000,
+        .scl_speed_hz    = MBOT_I2C_FREQ_HZ,
         .scl_wait_us     = 0,
         .flags           = {.disable_ack_check = 0},
     };
@@ -165,32 +169,67 @@ bool MbotClient::tryConnectOnce()
 
 std::string MbotClient::rescanBus()
 {
-    auto bus = hal_bridge::board_get_i2c_bus();
+    auto bus = hal_bridge::board_get_mbot_i2c_bus();
     std::string out;
-    out.reserve(2200);
-    out += "     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\n";
+    out.reserve(384);
+
+    // LoadingPage: lv_font_montserrat_20, ~300px wide, ~240px tall — avoid wide ASCII grids.
+    out += "Port A I2C\n";
+    out += "SDA=2 SCL=1\n\n";
+
     if (!bus) {
-        out += "(no I2C bus)\n";
+        out += "No I2C bus";
         return out;
     }
-    for (int i = 0; i < 128; i += 16) {
-        char line[8];
-        snprintf(line, sizeof(line), "%02x: ", i);
-        out += line;
-        for (int j = 0; j < 16; j++) {
-            uint8_t address = static_cast<uint8_t>(i + j);
-            esp_err_t ret = i2c_master_probe(bus, address, pdMS_TO_TICKS(200));
-            if (ret == ESP_OK) {
-                char buf[8];
-                snprintf(buf, sizeof(buf), "%02x ", address);
-                out += buf;
-            } else if (ret == ESP_ERR_TIMEOUT) {
-                out += "UU ";
-            } else {
-                out += "-- ";
+
+    constexpr size_t kMaxList = 32;
+    constexpr size_t kMaxShow = 10;
+    uint8_t found[kMaxList];
+    size_t n_found    = 0;
+    unsigned timeouts = 0;
+
+    for (int i = 0; i < 128; ++i) {
+        const uint8_t addr = static_cast<uint8_t>(i);
+        esp_err_t ret      = i2c_master_probe(bus, addr, pdMS_TO_TICKS(kRescanProbeTimeoutMs));
+        if (ret == ESP_OK) {
+            if (n_found < kMaxList) {
+                found[n_found++] = addr;
             }
+        } else if (ret == ESP_ERR_TIMEOUT) {
+            ++timeouts;
         }
-        out += "\n";
+    }
+
+    if (n_found == 0) {
+        out += "No devices";
+        if (timeouts) {
+            out += "\n";
+            out += std::to_string(timeouts);
+            out += " timeouts";
+        }
+        return out;
+    }
+
+    out += "Found:\n";
+    const size_t n_show = std::min(n_found, kMaxShow);
+    for (size_t i = 0; i < n_show; ++i) {
+        char line[20];
+        if (found[i] == kAddress) {
+            snprintf(line, sizeof(line), "0x%02X mBot\n", found[i]);
+        } else {
+            snprintf(line, sizeof(line), "0x%02X\n", found[i]);
+        }
+        out += line;
+    }
+    if (n_found > n_show) {
+        out += '+';
+        out += std::to_string(static_cast<unsigned>(n_found - n_show));
+        out += " more\n";
+    }
+    if (timeouts) {
+        out += "\n(";
+        out += std::to_string(timeouts);
+        out += " bus TO)";
     }
     return out;
 }

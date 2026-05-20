@@ -22,6 +22,7 @@
 #include <espnow_storage.h>
 #include <espnow_utils.h>
 #include <esp_check.h>
+#include <hal/board/hal_bridge.h>
 
 static const std::string_view _tag = "HAL-EspNow";
 
@@ -157,8 +158,18 @@ bool Hal::espNowSend(const std::vector<uint8_t>& data, const uint8_t* destAddr)
 
 void Hal::setLaserEnabled(bool enabled)
 {
-    static bool laser_enabled = false;
-    static bool is_inited     = false;
+    static bool laser_enabled           = false;
+    static bool is_inited               = false;
+    static bool laser_pin_conflict_warn = false;
+
+    // GPIO2 is CoreS3 Port A SDA when mBot I2C is initialized; driving it as laser breaks I2C.
+    if (hal_bridge::board_get_mbot_i2c_bus() != nullptr || isMbotBodyMotionEnabled()) {
+        if (enabled && !laser_pin_conflict_warn) {
+            mclog::tagWarn(_tag, "laser blocked: GPIO2 is Port A SDA (mBot) or body motion uses mBot");
+            laser_pin_conflict_warn = true;
+        }
+        return;
+    }
 
     if (laser_enabled == enabled) {
         return;

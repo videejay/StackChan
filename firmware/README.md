@@ -19,7 +19,7 @@ idf.py build
 
 ### Flash (standalone)
 
-Uses the project `partitions.csv`: app in `ota_0` at **0x200000** (8 MB), custom assets in partition **`assets`** (SPIFFS, **0xD00000**, ~2.81 MB). This layout matches the physical slots used by [bmorcelli/Launcher](https://github.com/bmorcelli/Launcher) on M5Stack CoreS3 (`support_files/custom_16Mb.csv`), so the same `build/stack-chan.bin` and `build/generated_assets.bin` can be installed through Launcher.
+Uses the project `partitions.csv`: factory/OTA app region starts at **0x20000** with **~7 MiB** per `ota_0` / `ota_1` slot; SPIFFS **`assets`** is at **0xE00000** (~1.9 MiB). This table is **not** byte-identical to [bmorcelli/Launcher](https://github.com/bmorcelli/Launcher) `custom_16Mb.csv` (larger app partitions, smaller SPIFFS). Use the offsets below when flashing `generated_assets.bin` manually.
 
 ```bash
 idf.py flash
@@ -42,15 +42,15 @@ Do this **in addition** after the app is installed:
    - **Backup tip:** Launcher can save the current SPIFFS to **`/bkp/spiffs.bin`** via **Bkp SPIFFS**; when restoring, it typically lets you pick a backup file—use your `generated_assets.bin` the same way.
 
 3. **USB `esptool` (if SPIFFS restore is awkward)**  
-   Only if your CoreS3 still uses Launcher’s **default 16 MB** table where the SPIFFS partition is at **0xD00000** (same as `support_files/custom_16Mb.csv` in the Launcher repo). Put the device in **download mode**, then:
+   For **this** repo’s `partitions.csv`, the SPIFFS **`assets`** partition starts at **0xE00000**. Put the device in **download mode**, then:
 
    ```bash
-   python -m esptool --chip esp32s3 -p PORT write_flash 0xd00000 build/generated_assets.bin
+   python -m esptool --chip esp32s3 -p PORT write_flash 0xe00000 build/generated_assets.bin
    ```
 
-   Replace `PORT` with your serial port (e.g. `COM7` on Windows). Do **not** use this offset if your partition table differs.
+   Replace `PORT` with your serial port (e.g. `COM7` on Windows). If you still use Launcher’s stock table with SPIFFS at **0xD00000**, use that offset instead — do **not** mix table and address.
 
-**Sizes:** `generated_assets.bin` must not exceed the SPIFFS partition size (Launcher **0x2D0000** bytes ≈ **2.81 MiB**). If the build fails or the file is too large, shrink emoji/fonts in `main/CMakeLists.txt` for `CONFIG_BOARD_TYPE_M5STACK_STACK_CHAN` and rebuild.
+**Sizes:** `generated_assets.bin` must not exceed the SPIFFS partition size in **`partitions.csv`** (**0x1D0000** bytes ≈ **1.9 MiB** for this project). If the build fails or the file is too large, shrink emoji/fonts in `main/CMakeLists.txt` for `CONFIG_BOARD_TYPE_M5STACK_STACK_CHAN` and rebuild.
 
 **Partition label:** xiaozhi code looks for partition **`assets`** first, then **`spiffs`** (patch under `patches/xiaozhi-esp32.patch`), so it finds Launcher’s **`spiffs`** slot after restore.
 

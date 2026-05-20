@@ -14,7 +14,8 @@ It is intended to be precise enough for another AI agent or developer to impleme
 
 | Device | Connection |
 |---|---|
-| StackChan I2C | Port 1 via Me RJ25 Adapter SDA/SCL breakout |
+| StackChan ↔ mBot I2C | **M5Stack CoreS3 HY2.0 Port A** (red): **SDA = GPIO2** (yellow), **SCL = GPIO1** (white), **5 V + GND** → mBot **Port 1** RJ25 SDA/SCL breakout. **Not** the internal I2C (GPIO12/11). If the LED matrix stays dark at boot, confirm **5 V** on Port A. |
+| StackChan (internal I2C) | On-board PMIC, touch, codec, camera SCCB on GPIO12/11 — **do not** wire mBot here. |
 | Servo | Port 1 via Me RJ25 Adapter, Slot 2 |
 | Line follower | Port 2 |
 | Ultrasonic sensor | Port 3 |

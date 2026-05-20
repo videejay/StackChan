@@ -54,6 +54,8 @@ XiaozhiConfig_t get_xiaozhi_config();
 void set_xiaozhi_config(const XiaozhiConfig_t& config);
 
 i2c_master_bus_handle_t board_get_i2c_bus();
+/** CoreS3 HY2.0 Port A (SDA GPIO2, SCL GPIO1) — mBot I2C. nullptr if not initialized. */
+i2c_master_bus_handle_t board_get_mbot_i2c_bus();
 StackChanCamera* board_get_camera();
 int board_get_battery_level();
 bool board_is_battery_charging();
