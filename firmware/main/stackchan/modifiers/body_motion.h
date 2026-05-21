@@ -8,6 +8,8 @@
 #include "../modifiable.h"
 #include <cstdint>
 
+class MbotClient;
+
 namespace stackchan {
 
 class BodyMotionModifier : public Modifier {
@@ -25,6 +27,10 @@ private:
     uint32_t next_too_close_feedback_ms_ = 0;
     bool turn_left_next_     = true;
     bool too_close_active_   = false;
+    bool motors_active_      = false;
+
+    void stopMotorsIfRunning(MbotClient& mbot);
+    void setMotorsTracked(MbotClient& mbot, int8_t left, int8_t right);
 };
 
 }  // namespace stackchan

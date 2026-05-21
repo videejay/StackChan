@@ -124,7 +124,7 @@ void HeadPetModifier::handle_swipe(Modifiable& stackchan)
     _shy_decorator_id = avatar.addDecorator(std::make_unique<avatar::ShyDecorator>(lv_screen_active(), duration));
 
     auto& mbot = MbotClient::GetInstance();
-    if (GetHAL().isMbotBodyMotionEnabled() && (mbot.isReady() || mbot.tryConnectOnce())) {
+    if (GetHAL().isMbotBodyMotionEnabled() && mbot.isReady()) {
         mbot.playTone(523, 120);
         mbot.setRgbLed(255, 0, 0);
         mbot.displayBitmap(8, kHeartBitmap, sizeof(kHeartBitmap));

@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <driver/i2c_master.h>
 #include <esp_err.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <string>
 
 class MbotClient {
@@ -42,8 +44,14 @@ public:
     /** One-shot: set verbose logging for this tag, then tryConnectOnce(). */
     bool init();
 
-    /** Single non-blocking connect attempt (probe → add device → ping). Safe to call every frame. */
+    /** Single connect attempt (probe → add device → optional ping). Thread-safe. */
     bool tryConnectOnce();
+
+    /**
+     * True when the link is up. Drops idle sessions (no traffic for 10 s) and retries connect
+     * 10 s after a loss. Thread-safe.
+     */
+    bool maintainLink();
 
     bool isReady() const;
 
@@ -58,6 +66,7 @@ public:
     /** Same scan as board boot I2C map; for on-device debug. */
     static std::string rescanBus();
 
+    /** Send PING only if no other mBot I2C traffic succeeded within the last 5 s. */
     bool ping();
     bool setMotors(int8_t left, int8_t right);
     bool stopMotors();
@@ -70,15 +79,52 @@ public:
     bool clearDisplay();
 
 private:
-    MbotClient() = default;
+    struct BusLockGuard {
+        explicit BusLockGuard(MbotClient& client) : client_(client), locked_(client_.lockBus())
+        {
+        }
+
+        ~BusLockGuard()
+        {
+            if (locked_) {
+                client_.unlockBus();
+            }
+        }
+
+        bool locked() const
+        {
+            return locked_;
+        }
+
+        BusLockGuard(const BusLockGuard&)            = delete;
+        BusLockGuard& operator=(const BusLockGuard&) = delete;
+
+        MbotClient& client_;
+        bool locked_;
+    };
+
+    MbotClient();
 
     void ensureVerboseLog();
-
-    bool transact(uint8_t cmd, const uint8_t* payload, uint8_t payloadLen, uint8_t* responsePayload,
-                  uint8_t expectedResponseLen);
+    bool lockBus();
+    void unlockBus();
+    bool hasRecentTraffic() const;
+    void checkIdleTimeoutLocked();
+    void dropDeviceLocked();
+    bool tryConnectImplLocked();
+    bool ensureLinkLocked();
+    bool pingImpl();
+    bool transactImpl(uint8_t cmd, const uint8_t* payload, uint8_t payloadLen, uint8_t* responsePayload,
+                      uint8_t expectedResponseLen);
+    void markLinkDown(const char* reason, LinkState state = LinkState::ProtocolError);
+    void noteDisconnectedLocked();
     static uint8_t crc8(const uint8_t* data, uint8_t len);
 
+    mutable SemaphoreHandle_t bus_mutex_;
     i2c_master_dev_handle_t device_ = nullptr;
     bool ready_                      = false;
+    uint32_t last_communication_ms_  = 0;
+    uint32_t link_down_since_ms_     = 0;
+    uint32_t next_reconnect_attempt_ms_ = 0;
     LinkStatus link_{};
 };

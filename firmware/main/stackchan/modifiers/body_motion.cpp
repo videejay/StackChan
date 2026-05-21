@@ -18,8 +18,27 @@ constexpr int kYawTurnThreshold          = 120;
 constexpr int8_t kForwardSpeed           = 28;
 constexpr int8_t kTurnSpeed              = 24;
 constexpr int8_t kObstacleTurnSpeed      = 32;
-constexpr uint8_t kNoGroundDetectedState = 0x03;
+/** Both line sensors "out" — no line / often no module on Port 2; do not stop the drive loop. */
+constexpr uint8_t kLineBothOutState = 0x03;
 }  // namespace
+
+void BodyMotionModifier::stopMotorsIfRunning(MbotClient& mbot)
+{
+    if (!motors_active_) {
+        return;
+    }
+    if (mbot.stopMotors()) {
+        motors_active_ = false;
+    }
+}
+
+void BodyMotionModifier::setMotorsTracked(MbotClient& mbot, int8_t left, int8_t right)
+{
+    if (!mbot.setMotors(left, right)) {
+        return;
+    }
+    motors_active_ = (left != 0 || right != 0);
+}
 
 void BodyMotionModifier::_update(Modifiable& stackchan)
 {
@@ -30,24 +49,25 @@ void BodyMotionModifier::_update(Modifiable& stackchan)
     next_update_ms_ = now + kUpdatePeriodMs;
 
     auto& mbot = MbotClient::GetInstance();
-    if (!mbot.isReady() && !mbot.tryConnectOnce()) {
+    if (!mbot.maintainLink()) {
+        motors_active_ = false;
         return;
     }
 
-    uint8_t line_state = kNoGroundDetectedState;
-    if (!mbot.getLineFollower(line_state) || line_state == kNoGroundDetectedState) {
-        mbot.stopMotors();
+    uint8_t line_state = kLineBothOutState;
+    if (!mbot.getLineFollower(line_state)) {
         return;
     }
+    // 0x03 = both sensors out (no line). Without a line follower on Port 2 this is the
+    // default reading — continue with distance + yaw instead of stopping every tick.
 
     uint16_t distance_cm = 0;
     if (!mbot.getDistanceCm(distance_cm)) {
-        mbot.stopMotors();
         return;
     }
 
     if (distance_cm > 0 && distance_cm < kTooCloseDistanceCm) {
-        mbot.stopMotors();
+        stopMotorsIfRunning(mbot);
         if (!too_close_active_ || now >= next_too_close_feedback_ms_) {
             mbot.displayText("DIST TOO SMALL");
             mbot.playTone(880, 120);
@@ -64,9 +84,9 @@ void BodyMotionModifier::_update(Modifiable& stackchan)
 
     if (distance_cm > 0 && distance_cm <= kObstacleDistanceCm) {
         if (turn_left_next_) {
-            mbot.setMotors(-kObstacleTurnSpeed, kObstacleTurnSpeed);
+            setMotorsTracked(mbot, -kObstacleTurnSpeed, kObstacleTurnSpeed);
         } else {
-            mbot.setMotors(kObstacleTurnSpeed, -kObstacleTurnSpeed);
+            setMotorsTracked(mbot, kObstacleTurnSpeed, -kObstacleTurnSpeed);
         }
         turn_left_next_ = !turn_left_next_;
         return;
@@ -74,11 +94,11 @@ void BodyMotionModifier::_update(Modifiable& stackchan)
 
     const int yaw = stackchan.motion().getCurrentYawAngle();
     if (yaw > kYawTurnThreshold) {
-        mbot.setMotors(-kTurnSpeed, kTurnSpeed);
+        setMotorsTracked(mbot, -kTurnSpeed, kTurnSpeed);
     } else if (yaw < -kYawTurnThreshold) {
-        mbot.setMotors(kTurnSpeed, -kTurnSpeed);
+        setMotorsTracked(mbot, kTurnSpeed, -kTurnSpeed);
     } else {
-        mbot.setMotors(kForwardSpeed, kForwardSpeed);
+        setMotorsTracked(mbot, kForwardSpeed, kForwardSpeed);
     }
 }
 

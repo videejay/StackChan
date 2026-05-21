@@ -127,7 +127,7 @@ void AppAiAgentBody::onRunning()
     auto& mbot = MbotClient::GetInstance();
 
     if (!connected_at_ms_ && now >= next_connect_attempt_ms_) {
-        const bool ok = mbot.tryConnectOnce();
+        const bool ok = mbot.maintainLink();
         if (ok) {
             connected_at_ms_    = now;
             connect_backoff_ms_ = 500;
@@ -141,6 +141,12 @@ void AppAiAgentBody::onRunning()
             next_connect_attempt_ms_ = now + connect_backoff_ms_;
             connect_backoff_ms_      = std::min<uint32_t>(connect_backoff_ms_ * 2U, 5000U);
         }
+    } else if (connected_at_ms_ && !mbot.maintainLink()) {
+        connected_at_ms_         = 0;
+        mbot_ok_sent_            = false;
+        connect_backoff_ms_      = 500;
+        next_connect_attempt_ms_ = now;
+        loading_page_->setMessage(formatMbotLinkMessage(mbot.snapshot()));
     }
 
     if (connected_at_ms_ && now - connected_at_ms_ >= 500) {

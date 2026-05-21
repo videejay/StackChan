@@ -197,7 +197,7 @@ The bitmap bytes are passed to `MeLEDMatrix::drawBitmap(...)`.
 
 No request payload.
 
-Also feeds the motor watchdog timer.
+Any valid I2C packet refreshes the communication watchdog timer.
 
 ### `0x09` Set RGB LED
 
@@ -288,11 +288,11 @@ Important current behavior:
 - invalid packets are logged to serial debug output
 - invalid packets do **not** currently generate a separate I2C error response frame
 
-## Motor watchdog
+## Communication watchdog
 
-- Timeout: `500 ms`
-- If no motor command refreshes the watchdog within the timeout, the firmware stops the motors automatically
-- `SET_MOTORS` and `STOP_MOTORS` both feed the watchdog
+- Every successfully parsed command (including `PING`, `GET_DISTANCE`, etc.) refreshes the watchdog
+- After `5000 ms` without a valid packet: stop both motors and show `OFF` on the LED matrix
+- After `10000 ms` without a valid packet: return to boot wait state — matrix shows `I2C`, red RGB LED blinks, and the next valid packet shows `OK` again as on first connect
 
 ## Suggested minimal master startup sequence
 
