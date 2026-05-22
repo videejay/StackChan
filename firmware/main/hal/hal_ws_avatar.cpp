@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "avatar_camera_stream.h"
 #include <stackchan/stackchan.h>
-#include <stackchan/privacy/camera_peripheral_guard.h>
 #include <memory>
 #include "board/hal_bridge.h"
 #include <mooncake.h>
@@ -168,9 +168,9 @@ public:
         }
 
         if (_is_streaming) {
-            if (GetHAL().millis() - _last_capture_time >= (_is_video_mode ? 700 : 350)) {
+            const uint32_t interval = _is_video_mode ? 700 : 350;
+            if (avatarCameraStreamTick(interval)) {
                 captureAndSendFrame();
-                _last_capture_time = GetHAL().millis();
             }
         }
     }
@@ -211,14 +211,7 @@ public:
                 case DataType::StartCameraStream: {
                     ESP_LOGI(_tag.c_str(), "Start Camera Stream");
                     GetHAL().setCameraLedActive(true);
-                    // Privacy LED step 4: hold a CameraPeripheralGuard
-                    // for the entire avatar-stream lifetime. This brings
-                    // the V4L2 stream up via the same refcount path as
-                    // FaceDetector / Capture, so simultaneous consumers
-                    // keep the stream alive without churn.
-                    if (!_camera_guard) {
-                        _camera_guard = std::make_unique<stackchan::privacy::CameraPeripheralGuard>();
-                    }
+                    avatarCameraStreamAcquire();
                     setStreamingEnabled(true);
                     _websocket->Send("camera stream started");
                     break;
@@ -227,7 +220,7 @@ public:
                     ESP_LOGI(_tag.c_str(), "Stop Camera Stream");
                     GetHAL().setCameraLedActive(false);
                     setStreamingEnabled(false);
-                    _camera_guard.reset();
+                    avatarCameraStreamRelease();
                     _websocket->Send("camera stream stopped");
                     break;
                 }
@@ -394,42 +387,12 @@ public:
             return;
         }
 
-        static int64_t _time_count = 0;
-        static int64_t _interval   = 0;
-
-        auto camera = hal_bridge::board_get_camera();
-        if (!camera) {
+        std::vector<uint8_t> jpeg;
+        if (!avatarCameraStreamCopyLatestJpeg(jpeg) || jpeg.empty()) {
             return;
         }
 
-        _time_count = esp_timer_get_time();
-        if (camera->StreamCaptures()) {
-            _interval = esp_timer_get_time() - _time_count;
-            mclog::info("camera capture time: {} ms", _interval / 1000);
-
-            const uint8_t* frameData = camera->GetFrameData();
-            size_t frameSize         = camera->GetFrameSize();
-            int width                = camera->GetFrameWidth();
-            int height               = camera->GetFrameHeight();
-            int format               = camera->GetFrameFormat();
-
-            uint8_t* jpeg_data = nullptr;
-            size_t jpeg_len    = 0;
-
-            // 压缩为 JPEG
-            _time_count = esp_timer_get_time();
-            if (image_to_jpeg((uint8_t*)frameData, frameSize, width, height, (v4l2_pix_fmt_t)format, 20, &jpeg_data,
-                              &jpeg_len)) {
-                _interval = esp_timer_get_time() - _time_count;
-                // mclog::info("jpeg encode time: {} ms, size: {}", _interval / 1000, jpeg_len);
-                mclog::info("jpeg encode time: {} ms", _interval / 1000);
-
-                if (jpeg_data) {
-                    sendPacket(DataType::Jpeg, jpeg_data, jpeg_len);  // Type 2 for JPEG
-                    free(jpeg_data);
-                }
-            }
-        }
+        sendPacket(DataType::Jpeg, jpeg.data(), jpeg.size());
     }
 
     void setStreamingEnabled(bool enabled)
@@ -441,15 +404,9 @@ private:
     std::unique_ptr<WebSocket> _websocket;
     std::string _url;
     uint32_t _last_reconnect_attempt = 0;
-    uint32_t _last_capture_time      = 0;
     uint32_t _last_heartbeat_time    = 0;
     bool _is_streaming               = false;
     bool _is_video_mode              = false;
-    // Held while the WS peer has the avatar camera stream open. Refcount
-    // composes with FaceDetector + Capture guards so the V4L2 stream
-    // stays up across all consumers and the privacy LED tracks "any
-    // consumer is reading frames" rather than any single code path.
-    std::unique_ptr<stackchan::privacy::CameraPeripheralGuard> _camera_guard;
     std::mutex _mutex;
     std::queue<ReceivedMessage> _msg_queue;
 

@@ -20,6 +20,11 @@ set(STACK_CHAN_INCLUDE_DIRS
     "assets"
 )
 list(APPEND STACK_CHAN_SOURCES main.cpp)
+# GLOB runs at configure time only; append new HAL sources here when added.
+list(APPEND STACK_CHAN_SOURCES
+    "hal/avatar_camera_stream.cpp"
+    "hal/mbot_web/mbot_web_stream.cpp"
+)
 
 # Define source files
 set(SOURCES "audio/audio_codec.cc"
@@ -340,11 +345,12 @@ idf_component_register(SRCS ${SOURCES}
                         mooncake_log
                         smooth_ui_toolkit
                         littlefs
+                        esp_http_server
                     )
 
-# Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
-# If BOARD_NAME is empty, use BOARD_TYPE
 if(NOT CMAKE_SCRIPT_MODE_FILE)
+    # Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
+    # If BOARD_NAME is empty, use BOARD_TYPE
     if(NOT BOARD_NAME)
         set(BOARD_NAME ${BOARD_TYPE})
     endif()

@@ -7,6 +7,9 @@ Build copies them into `stackchan_launcher_assets.gen.c` via `gen_launcher_embed
 Expected names (see `assets/tools/gen_launcher_embedded_assets.py`):
 
 - `icon_*.bin`, `app_center_bg.png`, `setup_stackchan_front_view.bin`, etc.
+- `index.html` — mBot / WEB.REMOTE UI (embedded in flash as fallback; SD/LittleFS copy overrides at runtime if present)
+
+Place `index.html` on SD/LittleFS to override the flash copy, e.g. `/sdcard/assets/index.html`. Source: `assets/assets_bin/index.html`.
 
 ### PNG ↔ LVGL `.bin`
 

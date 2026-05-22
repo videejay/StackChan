@@ -68,6 +68,12 @@ public:
 
     /** Send PING only if no other mBot I2C traffic succeeded within the last 5 s. */
     bool ping();
+
+    /**
+     * Background keepalive: ping first (when idle), then enforce link state.
+     * Call from the main loop at highest priority — before LVGL or camera work.
+     */
+    bool serviceKeepAlive();
     bool setMotors(int8_t left, int8_t right);
     bool stopMotors();
     bool getDistanceCm(uint16_t& distanceCm);
@@ -75,6 +81,7 @@ public:
     bool displayText(const char* text);
     bool setRgbLed(uint8_t r, uint8_t g, uint8_t b);
     bool playTone(uint16_t frequencyHz, uint16_t durationMs);
+    bool setServoAngle(uint8_t angle);
     bool displayBitmap(uint8_t width, const uint8_t* bitmap, uint8_t bitmapLen);
     bool clearDisplay();
 

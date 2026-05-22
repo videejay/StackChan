@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StackChan Web Remote</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;background:#0a0a0a;color:#e8ffe8}
+header{padding:12px 16px;background:#1a3d1a;border-bottom:2px solid #3f3}h1{margin:0;font-size:1.2rem}
+main{padding:12px;display:grid;gap:10px;max-width:560px;margin:auto}
+.card{background:#111;border:1px solid #3a5a3a;border-radius:8px;padding:10px}
+.card h2{margin:0 0 8px;font-size:.95rem;color:#9cb99c;font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+label{min-width:70px;font-size:.85rem;color:#9cb99c}
+input,button,select{padding:8px;border-radius:6px;border:1px solid #3a5a3a;background:#0d1a0d;color:#e8ffe8}
+button{cursor:pointer;background:#1a4d1a}button:active{opacity:.8}
+button.sm{padding:6px 8px;font-size:.78rem}
+input[type=color]{padding:2px;width:52px;height:40px;border:none;background:transparent}
+input[type=range]{flex:1;min-width:120px;accent-color:#3f3}
+input[type=checkbox]{width:18px;height:18px;accent-color:#3f3}
+#log{font-size:.8rem;min-height:2em;color:#9cb99c;word-break:break-all}
+.joy-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:420px){.joy-row{grid-template-columns:1fr}}
+.joy-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+.joy-pad{position:relative;width:150px;height:150px;border-radius:50%;border:2px solid #3a5a3a;background:#0d1a0d;touch-action:none;user-select:none}
+.joy-knob{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:#1a4d1a;border:2px solid #3f3;pointer-events:none}
+.joy-hint{font-size:.75rem;color:#9cb99c;text-align:center}
+.joy-vals{font-size:.8rem;color:#e8ffe8;font-variant-numeric:tabular-nums}
+.rgb-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#rgbSwatch{width:40px;height:40px;border-radius:6px;border:2px solid #3a5a3a;background:#000}
+.rgb-nums input{width:52px}
+.servo-row{display:flex;gap:8px;align-items:center;width:100%}
+#angLbl{min-width:42px;font-variant-numeric:tabular-nums}
+.piano-wrap{position:relative;width:100%;max-width:340px;height:108px;margin:8px auto 4px}
+.piano-whites{display:flex;height:100%;gap:1px}
+.piano-whites .key{flex:1;border:1px solid #3a5a3a;border-radius:0 0 5px 5px;background:#142814;color:#9cb99c;
+font-size:.62rem;padding:52px 0 4px;touch-action:none;user-select:none}
+.piano-blacks{position:absolute;top:0;left:0;right:0;height:62%;pointer-events:none}
+.piano-blacks .key{position:absolute;width:9.5%;height:100%;pointer-events:auto;border:1px solid #3a5a3a;
+border-radius:0 0 4px 4px;background:#050805;color:#7a9a7a;font-size:.5rem;padding-top:4px}
+.key:active,.key.on{background:#1a4d1a;color:#e8ffe8}
+details{font-size:.85rem;color:#9cb99c;margin-top:6px}
+details .row{margin-top:6px}
+#camStream{width:100%;max-height:240px;background:#000;border-radius:6px;object-fit:contain;display:none}
+#camStream.on{display:block}
+.emotion-row{display:flex;flex-wrap:wrap;gap:6px}
+</style>
+</head>
+<body>
+<header><h1>StackChan Web Remote</h1></header>
+<main>
+<div class="card"><div id="log">Ready</div></div>
+
+<div class="card">
+<h2>StackChan Avatar</h2>
+<label>Expression</label>
+<div class="emotion-row">
+<button type="button" class="sm" onclick="emotion('neutral')">Neutral</button>
+<button type="button" class="sm" onclick="emotion('happy')">Happy</button>
+<button type="button" class="sm" onclick="emotion('angry')">Angry</button>
+<button type="button" class="sm" onclick="emotion('sad')">Sad</button>
+<button type="button" class="sm" onclick="emotion('sleepy')">Sleepy</button>
+<button type="button" class="sm" onclick="emotion('thinking')">Think</button>
+<button type="button" class="sm" onclick="emotion('surprised')">Surprise</button>
+<button type="button" class="sm" onclick="emotion('loving')">Love</button>
+</div>
+<div class="row" style="margin-top:10px">
+<label>Bubble</label><input id="bubbleTxt" maxlength="120" style="flex:1" placeholder="Speech on avatar">
+<button onclick="bubbleSay()">Say</button>
+<button onclick="bubbleClear()">Clear</button>
+</div>
+<div class="joy-row" style="margin-top:10px">
+<div class="joy-wrap">
+<div class="joy-pad" id="headJoyPad"><div class="joy-knob" id="headJoyKnob"></div></div>
+<div class="joy-hint">Head · release to center</div>
+<div class="joy-vals" id="headJoyVals">yaw 0 pitch 0</div>
+</div>
+<div class="joy-wrap">
+<label class="row" style="margin:0"><input type="checkbox" id="streamEn" onchange="toggleStream()"> Camera stream</label>
+<img id="camStream" alt="Camera">
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>mBot</h2>
+<div class="row">
+<button onclick="api('GET','/api/ping')">Ping</button>
+<button onclick="api('POST','/api/stop')">Stop</button>
+<button onclick="api('GET','/api/distance')">Distance</button>
+<button onclick="api('GET','/api/line')">Line</button>
+<button onclick="api('POST','/api/clear')">Clear LCD</button>
+</div>
+<div class="joy-wrap">
+<div class="joy-pad" id="joyPad"><div class="joy-knob" id="joyKnob"></div></div>
+<div class="joy-hint">Motors · release to stop</div>
+<div class="joy-vals" id="joyVals">L 0 R 0</div>
+</div>
+<div class="row">
+<label>Mot L</label><input id="ml" type="number" value="0" min="-128" max="127">
+<label>R</label><input id="mr" type="number" value="0" min="-128" max="127">
+<button onclick="motors()">Motors</button>
+</div>
+<div class="row">
+<label>LCD</label><input id="txt" maxlength="24" style="flex:1">
+<button onclick="text()">Show</button>
+</div>
+</div>
+
+<div class="card">
+<label>RGB LED</label>
+<div class="rgb-row">
+<input type="color" id="rgbPick" value="#000000">
+<div id="rgbSwatch"></div>
+<div class="rgb-nums row" style="margin:0">
+<input id="r" type="number" value="0" min="0" max="255" title="R">
+<input id="g" type="number" value="0" min="0" max="255" title="G">
+<input id="b" type="number" value="0" min="0" max="255" title="B">
+<button onclick="rgb()">Apply</button>
+</div>
+</div>
+</div>
+<div class="card">
+<label>Servo</label>
+<div class="servo-row">
+<input type="range" id="angSlider" min="0" max="180" value="90">
+<span id="angLbl">90°</span>
+<input id="ang" type="number" value="90" min="0" max="180" style="width:56px">
+</div>
+</div>
+<div class="card">
+<label>Piano</label>
+<div class="piano-wrap">
+<div class="piano-whites">
+<button type="button" class="key" data-f="262">C</button>
+<button type="button" class="key" data-f="294">D</button>
+<button type="button" class="key" data-f="330">E</button>
+<button type="button" class="key" data-f="349">F</button>
+<button type="button" class="key" data-f="392">G</button>
+<button type="button" class="key" data-f="440">A</button>
+<button type="button" class="key" data-f="494">B</button>
+</div>
+<div class="piano-blacks">
+<button type="button" class="key" data-f="277" style="left:8%">C#</button>
+<button type="button" class="key" data-f="311" style="left:22%">D#</button>
+<button type="button" class="key" data-f="370" style="left:50%">F#</button>
+<button type="button" class="key" data-f="415" style="left:64%">G#</button>
+<button type="button" class="key" data-f="466" style="left:78%">A#</button>
+</div>
+</div>
+<details>
+<summary>Manual tone (Hz / ms)</summary>
+<div class="row">
+<label>Hz</label><input id="hz" type="number" value="523" min="40" max="5000" style="width:80px">
+<label>Ms</label><input id="ms" type="number" value="200" min="20" max="3000" style="width:70px">
+<button onclick="tone()">Play</button>
+</div>
+</details>
+</div>
+</main>
+<script>
+async function api(m,u,b){try{const o={method:m,headers:{'Content-Type':'application/json'}};
+if(b)o.body=JSON.stringify(b);const r=await fetch(u,o);const j=await r.json();
+document.getElementById('log').textContent=(j.message||JSON.stringify(j))+(j.value!==undefined?' val='+j.value:'');return j;}catch(e){if(e.name!=='AbortError')document.getElementById('log').textContent=String(e);return null;}}
+function motors(){api('POST','/api/motors',{left:+document.getElementById('ml').value,right:+document.getElementById('mr').value});}
+function text(){api('POST','/api/text',{text:document.getElementById('txt').value});}
+function rgb(){api('POST','/api/rgb',{r:+document.getElementById('r').value,g:+document.getElementById('g').value,b:+document.getElementById('b').value});}
+function servo(){api('POST','/api/servo',{angle:+document.getElementById('ang').value});}
+function tone(){api('POST','/api/tone',{freq:+document.getElementById('hz').value,ms:+document.getElementById('ms').value});}
+function emotion(e){api('POST','/api/avatar/emotion',{emotion:e});}
+function bubbleSay(){api('POST','/api/avatar/speech',{text:document.getElementById('bubbleTxt').value});}
+function bubbleClear(){api('POST','/api/avatar/speech/clear');}
+async function toggleStream(){
+const on=document.getElementById('streamEn').checked;
+const img=document.getElementById('camStream');
+const j=await api('POST','/api/camera/stream',{enabled:on});
+if(j&&j.ok&&on){img.src='/api/camera/stream.mjpg?t='+Date.now();img.classList.add('on');}
+else{img.src='';img.classList.remove('on');if(!j||!j.ok)document.getElementById('streamEn').checked=false;}
+}
+(function(){
+const pad=document.getElementById('joyPad'),knob=document.getElementById('joyKnob'),vals=document.getElementById('joyVals');
+const ml=document.getElementById('ml'),mr=document.getElementById('mr');
+const DZ=0.12,MAX=127;let jx=0,jy=0,jActive=0,jTimer=0,jPending=0,jAbort=null;
+const hdr={'Content-Type':'application/json'};
+function clamp(v){return v<-128?-128:v>127?127:v;}
+function joyNorm(el,cx,cy){const r=el.getBoundingClientRect(),hx=r.width/2,hy=r.height/2,m=hx*0.85;
+let x=(cx-(r.left+hx))/m,y=(cy-(r.top+hy))/m;const s=Math.hypot(x,y);if(s>1){x/=s;y/=s;}return{x,y};}
+function joyKnobPos(k,x,y){const m=48;k.style.transform='translate('+(x*m)+'px,'+(y*m)+'px)';}
+function joyToMotors(x,y){const s=Math.hypot(x,y);if(s<DZ)return{left:0,right:0};
+let nx=x,ny=y;if(s>1){nx/=s;ny/=s;}const f=-ny,t=nx;
+return{left:clamp(Math.round((f+t)*MAX)),right:clamp(Math.round((f-t)*MAX))};}
+function joyShow(l,r){vals.textContent='L '+l+' R '+r;ml.value=l;mr.value=r;}
+function joyHalt(){
+fetch('/api/stop',{method:'POST',headers:hdr}).catch(()=>{});
+fetch('/api/motors',{method:'POST',headers:hdr,body:'{"left":0,"right":0}'}).catch(()=>{});
+}
+function joySend(){if(!jActive||jPending)return;const m=joyToMotors(jx,jy);joyShow(m.left,m.right);
+jPending=1;jAbort=new AbortController();
+fetch('/api/motors',{method:'POST',headers:hdr,body:JSON.stringify(m),signal:jAbort.signal})
+.then(r=>r.json()).then(j=>{if(jActive)document.getElementById('log').textContent=j.message||'motors';})
+.catch(e=>{if(e.name!=='AbortError'&&jActive)document.getElementById('log').textContent=String(e);})
+.finally(()=>{jPending=0;jAbort=null;});}
+function joyStop(){jActive=0;if(jTimer){clearInterval(jTimer);jTimer=0;}
+if(jAbort){jAbort.abort();jAbort=null;}jPending=0;jx=0;jy=0;joyKnobPos(knob,0,0);joyShow(0,0);joyHalt();
+fetch('/api/stop',{method:'POST',headers:hdr}).then(r=>r.json()).then(j=>{
+document.getElementById('log').textContent=j.message||'stop';}).catch(()=>{});}
+function joyMove(cx,cy){const n=joyNorm(pad,cx,cy);jx=n.x;jy=n.y;joyKnobPos(knob,jx,jy);const m=joyToMotors(jx,jy);joyShow(m.left,m.right);}
+pad.addEventListener('pointerdown',e=>{e.preventDefault();pad.setPointerCapture(e.pointerId);jActive=1;
+joyMove(e.clientX,e.clientY);if(!jTimer)jTimer=setInterval(joySend,100);});
+pad.addEventListener('pointermove',e=>{if(!jActive)return;e.preventDefault();joyMove(e.clientX,e.clientY);});
+pad.addEventListener('pointerup',e=>{if(pad.hasPointerCapture(e.pointerId))pad.releasePointerCapture(e.pointerId);joyStop();});
+pad.addEventListener('pointercancel',e=>{if(pad.hasPointerCapture(e.pointerId))pad.releasePointerCapture(e.pointerId);joyStop();});
+pad.addEventListener('pointerleave',()=>{if(jActive)joyStop();});
+pad.addEventListener('lostpointercapture',()=>{if(jActive)joyStop();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&jActive)joyStop();});
+})();
+(function(){
+const pad=document.getElementById('headJoyPad'),knob=document.getElementById('headJoyKnob'),vals=document.getElementById('headJoyVals');
+const DZ=0.1;let hx=0,hy=0,hActive=0,hTimer=0,hPending=0,hAbort=null;
+const hdr={'Content-Type':'application/json'};
+function joyNorm(el,cx,cy){const r=el.getBoundingClientRect(),mx=r.width/2,my=r.height/2,m=mx*0.85;
+let x=(cx-(r.left+mx))/m,y=(cy-(r.top+my))/m;const s=Math.hypot(x,y);if(s>1){x/=s;y/=s;}return{x,y};}
+function toHead(x,y){if(Math.hypot(x,y)<DZ)return{yaw:0,pitch:0};
+return{yaw:Math.round(x*1280),pitch:Math.round((-y+1)*450)};}
+function showHead(y,p){vals.textContent='yaw '+y+' pitch '+p;}
+function sendHead(){if(!hActive||hPending)return;const h=toHead(hx,hy);showHead(h.yaw,h.pitch);
+hPending=1;hAbort=new AbortController();
+fetch('/api/avatar/head',{method:'POST',headers:hdr,body:JSON.stringify({yaw:h.yaw,pitch:h.pitch,speed:500}),signal:hAbort.signal})
+.finally(()=>{hPending=0;hAbort=null;});}
+function headStop(){hActive=0;if(hTimer){clearInterval(hTimer);hTimer=0;}
+if(hAbort){hAbort.abort();hAbort=null;}hx=0;hy=0;
+knob.style.transform='translate(0,0)';showHead(0,0);
+fetch('/api/avatar/head/home',{method:'POST',headers:hdr}).catch(()=>{});}
+function headMove(cx,cy){const n=joyNorm(pad,cx,cy);hx=n.x;hy=n.y;knob.style.transform='translate('+(hx*48)+'px,'+(hy*48)+'px)';
+const h=toHead(hx,hy);showHead(h.yaw,h.pitch);}
+pad.addEventListener('pointerdown',e=>{e.preventDefault();pad.setPointerCapture(e.pointerId);hActive=1;
+headMove(e.clientX,e.clientY);if(!hTimer)hTimer=setInterval(sendHead,100);});
+pad.addEventListener('pointermove',e=>{if(!hActive)return;e.preventDefault();headMove(e.clientX,e.clientY);});
+pad.addEventListener('pointerup',e=>{if(pad.hasPointerCapture(e.pointerId))pad.releasePointerCapture(e.pointerId);headStop();});
+pad.addEventListener('pointercancel',e=>{if(pad.hasPointerCapture(e.pointerId))pad.releasePointerCapture(e.pointerId);headStop();});
+pad.addEventListener('pointerleave',()=>{if(hActive)headStop();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&hActive)headStop();});
+})();
+(function(){
+const pick=document.getElementById('rgbPick'),sw=document.getElementById('rgbSwatch');
+const ri=document.getElementById('r'),gi=document.getElementById('g'),bi=document.getElementById('b');
+function hex2(n){return ('0'+Math.max(0,Math.min(255,n|0)).toString(16)).slice(-2);}
+function syncFromPick(){const h=pick.value;ri.value=parseInt(h.slice(1,3),16);gi.value=parseInt(h.slice(3,5),16);
+bi.value=parseInt(h.slice(5,7),16);sw.style.background=h;}
+function syncToPick(){pick.value='#'+hex2(ri.value)+hex2(gi.value)+hex2(bi.value);sw.style.background=pick.value;}
+pick.addEventListener('change',()=>{syncFromPick();rgb();});
+[ri,gi,bi].forEach(el=>el.addEventListener('change',syncToPick));
+syncFromPick();
+})();
+(function(){
+const sl=document.getElementById('angSlider'),lb=document.getElementById('angLbl'),an=document.getElementById('ang');
+let t=0;
+function setAng(v){v=Math.max(0,Math.min(180,v|0));sl.value=v;an.value=v;lb.textContent=v+'°';}
+function sendServo(){servo();}
+sl.addEventListener('input',()=>{setAng(+sl.value);clearTimeout(t);t=setTimeout(sendServo,150);});
+sl.addEventListener('change',sendServo);
+an.addEventListener('change',()=>{setAng(+an.value);sendServo();});
+})();
+(function(){
+const NOTE_MS=200;
+function playKey(el){const f=+el.dataset.f;if(!f)return;el.classList.add('on');
+fetch('/api/tone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({freq:f,ms:NOTE_MS})})
+.then(r=>r.json()).then(j=>{document.getElementById('log').textContent=j.message||'tone';}).catch(e=>{
+document.getElementById('log').textContent=String(e);});}
+function offKey(el){el.classList.remove('on');}
+document.querySelectorAll('.piano-wrap .key').forEach(k=>{
+k.addEventListener('pointerdown',e=>{e.preventDefault();playKey(k);});
+k.addEventListener('pointerup',()=>offKey(k));
+k.addEventListener('pointerleave',()=>offKey(k));
+k.addEventListener('pointercancel',()=>offKey(k));});
+})();
+fetch('/api/status').then(r=>r.json()).then(j=>{if(j.ip)document.getElementById('log').textContent='IP '+j.ip;});
+window.addEventListener('pagehide',()=>{if(document.getElementById('streamEn').checked){
+fetch('/api/camera/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"enabled":false}',keepalive:true});}});
+</script>
+</body>
+</html>

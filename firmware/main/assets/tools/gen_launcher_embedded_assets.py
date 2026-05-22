@@ -40,6 +40,8 @@ MANIFEST = [
     "icon_app_center.bin",
     "icon_ai_agent.bin",
     "icon_ai_robot.bin",
+    "icon_ai_robot_remote.bin",
+    "index.html",
 ]
 
 # Canonical 67-byte 1×1 transparent PNG (from public-domain minimal PNG corpus).
@@ -157,6 +159,12 @@ def _load_or_placeholder(assets_bin: Path, fname: str) -> bytes:
         return MINI_PNG_1X1
     if lower.endswith(".bin"):
         return _lvgl_rgb565_placeholder(fname)
+    if lower.endswith(".html"):
+        return (
+            b"<!DOCTYPE html><html><body><p>Missing "
+            + fname.encode("utf-8")
+            + b" in assets_bin</p></body></html>"
+        )
     raise ValueError(f"unsupported asset extension: {fname}")
 
 

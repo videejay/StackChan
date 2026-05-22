@@ -407,6 +407,22 @@ bool MbotClient::ping()
     return pingImpl();
 }
 
+bool MbotClient::serviceKeepAlive()
+{
+    BusLockGuard guard(*this);
+    if (!guard.locked()) {
+        return ready_;
+    }
+
+    // Ping before idle-timeout check so avatar/camera-only use keeps the link up.
+    if (!hasRecentTraffic()) {
+        pingImpl();
+    }
+
+    checkIdleTimeoutLocked();
+    return ensureLinkLocked();
+}
+
 bool MbotClient::setMotors(int8_t left, int8_t right)
 {
     BusLockGuard guard(*this);
@@ -499,6 +515,17 @@ bool MbotClient::playTone(uint16_t frequencyHz, uint16_t durationMs)
     };
     ESP_LOGI(TAG, "mBot play tone Freq: %d Duration: %d", frequencyHz, durationMs);
     return transactImpl(0x0A, payload, sizeof(payload), nullptr, 0);
+}
+
+bool MbotClient::setServoAngle(uint8_t angle)
+{
+    BusLockGuard guard(*this);
+    if (!guard.locked() || !ensureLinkLocked()) {
+        return false;
+    }
+    uint8_t payload[1] = {angle};
+    ESP_LOGI(TAG, "mBot servo angle %u", static_cast<unsigned>(angle));
+    return transactImpl(0x0C, payload, sizeof(payload), nullptr, 0);
 }
 
 bool MbotClient::displayBitmap(uint8_t width, const uint8_t* bitmap, uint8_t bitmapLen)

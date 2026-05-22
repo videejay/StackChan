@@ -297,6 +297,8 @@ public:
     /* --------------------------------- Network -------------------------------- */
     void startNetwork(std::function<void(std::string_view)> onLog);
     WifiStatus getWifiStatus();
+    bool isWifiConnected();
+    std::string getWifiIpAddress();
     void startSntp();
 
     /* -------------------------------- App center ------------------------------- */

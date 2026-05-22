@@ -123,7 +123,7 @@ Expected range:
 
 - `-100..100`
 
-The firmware maps this to the mCore motor driver range internally.
+The firmware maps this to the mCore motor driver range internally. **M1 (left)** is inverted in firmware so that positive `left` and positive `right` both mean forward (M2 was already correct on the hardware).
 
 Example: forward at 50% on both motors
 

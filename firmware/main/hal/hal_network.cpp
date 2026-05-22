@@ -15,7 +15,9 @@
 #include <ctime>
 #include <sys/time.h>
 #include <esp_sntp.h>
+#include <esp_netif.h>
 #include <atomic>
+#include <cstring>
 
 static std::string _tag           = "Network";
 static bool _is_network_connected = false;
@@ -117,6 +119,33 @@ void Hal::startNetwork(std::function<void(std::string_view)> onLog)
     startSntp();
 
     _is_network_connected = true;
+}
+
+bool Hal::isWifiConnected()
+{
+    auto& wifi = WifiManager::GetInstance();
+    return wifi.IsConnected() && !wifi.IsConfigMode();
+}
+
+std::string Hal::getWifiIpAddress()
+{
+    if (!isWifiConnected()) {
+        return {};
+    }
+
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!netif) {
+        return {};
+    }
+
+    esp_netif_ip_info_t ip_info{};
+    if (esp_netif_get_ip_info(netif, &ip_info) != ESP_OK) {
+        return {};
+    }
+
+    char buf[16] = {};
+    esp_ip4addr_ntoa(&ip_info.ip, buf, sizeof(buf));
+    return std::string(buf);
 }
 
 WifiStatus Hal::getWifiStatus()
