@@ -29,5 +29,11 @@ bool avatarCameraStreamTick(uint32_t intervalMs);
 /** Copy latest JPEG frame; returns false if none available yet. */
 bool avatarCameraStreamCopyLatestJpeg(std::vector<uint8_t>& out);
 
+/**
+ * Capture + encode into @p out when @p intervalMs elapsed (for HTTP MJPEG handler).
+ * Avoids sharing a frame buffer between the main loop and httpd task.
+ */
+bool avatarCameraStreamCaptureFrame(std::vector<uint8_t>& out, uint32_t intervalMs);
+
 /** Clear stored frame (e.g. on stream stop). */
 void avatarCameraStreamClearLatestJpeg();

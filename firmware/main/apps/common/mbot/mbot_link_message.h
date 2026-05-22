@@ -63,4 +63,28 @@ inline std::string formatMbotLinkMessage(const MbotClient::LinkStatus& s, const 
     }
 }
 
+/** Compact one-liner for red error toasts (Avatar app style). */
+inline std::string formatMbotErrorToast(const MbotClient::LinkStatus& s)
+{
+    switch (s.state) {
+        case MbotClient::LinkState::ProtocolError: {
+            std::string msg = "mBot error: ";
+            msg += (s.lastReason && s.lastReason[0]) ? s.lastReason : "protocol";
+            return msg;
+        }
+        case MbotClient::LinkState::ProbeNack:
+            return "mBot not detected on I2C bus";
+        case MbotClient::LinkState::ProbeTimeout:
+            return "mBot I2C timeout";
+        case MbotClient::LinkState::AddDeviceFailed:
+            return "mBot I2C setup failed";
+        case MbotClient::LinkState::Handshaking:
+            return "mBot handshake failed";
+        case MbotClient::LinkState::Probing:
+            return "mBot probe failed";
+        default:
+            return "mBot connection error";
+    }
+}
+
 }  // namespace view

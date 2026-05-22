@@ -8,7 +8,10 @@
 #include <apps/common/home_indicator/home_indicator.h>
 #include <apps/common/mbot/mbot_link_message.h>
 #include <apps/common/status_bar/status_bar.h>
+#include <apps/common/toast/toast.h>
 #include <assets/assets.h>
+#include <board.h>
+#include <display.h>
 #include <hal/drivers/mbot/mbot_client.h>
 #include <hal/hal.h>
 #include <hal/mbot_web/mbot_web_server.h>
@@ -64,6 +67,47 @@ void AppWebRemote::showAvatar()
     view::create_status_bar(kThemeColor, kThemeColorDark);
 }
 
+void AppWebRemote::notifyMbotStatus(const char* text)
+{
+    if (!text) {
+        return;
+    }
+
+    if (avatar_attached_ && GetStackChan().hasAvatar()) {
+        Board::GetInstance().GetDisplay()->SetChatMessage("assistant", text);
+        return;
+    }
+
+    view::pop_a_toast(text, view::ToastType::Info, 1600);
+}
+
+void AppWebRemote::showMbotErrorToastIfNeeded(const MbotClient::LinkStatus& status, uint32_t now)
+{
+    if (status.state == MbotClient::LinkState::Ready || status.state == MbotClient::LinkState::Idle) {
+        return;
+    }
+
+    const bool stateChanged = status.state != last_toast_error_state_;
+    const bool intervalOk   = (now - last_error_toast_ms_) >= kErrorToastIntervalMs;
+    if (!stateChanged && !intervalOk) {
+        return;
+    }
+
+    last_toast_error_state_ = status.state;
+    last_error_toast_ms_    = now;
+    view::pop_a_toast(view::formatMbotErrorToast(status), view::ToastType::Error, 12000);
+}
+
+void AppWebRemote::enterMbotReconnect(Phase resumePhase)
+{
+    resume_phase_            = resumePhase;
+    phase_                   = Phase::MbotReconnect;
+    mbot_link_up_            = false;
+    next_connect_attempt_ms_ = GetHAL().millis();
+    connect_backoff_ms_      = 500;
+    notifyMbotStatus("mBot disconnected");
+}
+
 void AppWebRemote::onOpen()
 {
     mclog::tagInfo(getAppInfo().name, "on open");
@@ -71,12 +115,17 @@ void AppWebRemote::onOpen()
     MbotClient::GetInstance().resetConnectionDiagnostics();
 
     phase_                    = Phase::EnsureWifi;
+    resume_phase_             = Phase::ShowUrl;
     network_start_attempted_  = false;
     avatar_attached_          = false;
+    session_started_          = false;
+    mbot_link_up_             = false;
     next_connect_attempt_ms_  = 0;
     connect_backoff_ms_       = 500;
     url_shown_at_ms_          = 0;
     last_keepalive_ms_        = 0;
+    last_error_toast_ms_      = 0;
+    last_toast_error_state_   = MbotClient::LinkState::Idle;
 
     LvglLockGuard lock;
     loading_page_ = std::make_unique<view::LoadingPage>(0x000000, 0xFFFFFF);
@@ -90,7 +139,7 @@ void AppWebRemote::onOpen()
 
 void AppWebRemote::serviceMbotKeepalive(uint32_t now)
 {
-    if (phase_ != Phase::ShowUrl && phase_ != Phase::AvatarIdle) {
+    if (phase_ != Phase::ShowUrl && phase_ != Phase::AvatarIdle && phase_ != Phase::MbotReconnect) {
         return;
     }
 
@@ -101,7 +150,6 @@ void AppWebRemote::serviceMbotKeepalive(uint32_t now)
         return;
     }
 
-    // Between ping intervals still verify link (cheap; does not ping).
     mbot.maintainLink();
 }
 
@@ -109,7 +157,6 @@ void AppWebRemote::onRunning()
 {
     const auto now = GetHAL().millis();
 
-    // Highest priority: mBot link must stay up while using avatar/camera (no I2C traffic otherwise).
     serviceMbotKeepalive(now);
 
     if (mbotWebIsActive()) {
@@ -154,7 +201,8 @@ void AppWebRemote::onRunning()
         case Phase::ConnectMbot:
             if (now >= next_connect_attempt_ms_) {
                 if (mbot.maintainLink()) {
-                    phase_ = Phase::StartHttp;
+                    mbot_link_up_ = true;
+                    phase_        = Phase::StartHttp;
                 } else {
                     loading_page_->setMessage(view::formatMbotLinkMessage(mbot.snapshot()));
                     next_connect_attempt_ms_ = now + connect_backoff_ms_;
@@ -169,9 +217,11 @@ void AppWebRemote::onRunning()
                 std::string msg;
                 formatUrlMessage(msg);
                 loading_page_->setMessage(msg);
-                url_shown_at_ms_ = now;
+                url_shown_at_ms_   = now;
                 last_keepalive_ms_ = now;
-                phase_           = Phase::ShowUrl;
+                session_started_   = true;
+                mbot_link_up_      = true;
+                phase_             = Phase::ShowUrl;
             } else {
                 loading_page_->setMessage("HTTP server failed\n\nSwipe up: Home");
                 phase_ = Phase::Error;
@@ -180,10 +230,14 @@ void AppWebRemote::onRunning()
 
         case Phase::ShowUrl:
             if (!mbot.maintainLink()) {
-                loading_page_->setMessage(view::formatMbotLinkMessage(mbot.snapshot()));
-                phase_                   = Phase::ConnectMbot;
-                next_connect_attempt_ms_ = now;
-                connect_backoff_ms_      = 500;
+                if (session_started_) {
+                    enterMbotReconnect(Phase::ShowUrl);
+                } else {
+                    loading_page_->setMessage(view::formatMbotLinkMessage(mbot.snapshot()));
+                    phase_                   = Phase::ConnectMbot;
+                    next_connect_attempt_ms_ = now;
+                    connect_backoff_ms_      = 500;
+                }
                 break;
             }
             if (now - url_shown_at_ms_ >= kUrlDisplayMs) {
@@ -195,22 +249,48 @@ void AppWebRemote::onRunning()
 
         case Phase::AvatarIdle:
             if (!mbot.maintainLink()) {
-                avatar_attached_ = false;
-                GetStackChan().resetAvatar();
-                view::destroy_status_bar();
-                loading_page_ = std::make_unique<view::LoadingPage>(0x000000, 0xFFFFFF);
-                loading_page_->setMessage(view::formatMbotLinkMessage(mbot.snapshot()));
-                loading_page_->setOnLongPress([this]() {
-                    std::string scan = MbotClient::rescanBus();
-                    loading_page_->setMessage(std::string("I2C scan (long-press to refresh):\n") + scan);
-                });
-                phase_                   = Phase::ConnectMbot;
-                next_connect_attempt_ms_ = now;
-                connect_backoff_ms_      = 500;
+                if (session_started_) {
+                    enterMbotReconnect(Phase::AvatarIdle);
+                } else {
+                    avatar_attached_ = false;
+                    GetStackChan().resetAvatar();
+                    view::destroy_status_bar();
+                    loading_page_ = std::make_unique<view::LoadingPage>(0x000000, 0xFFFFFF);
+                    loading_page_->setMessage(view::formatMbotLinkMessage(mbot.snapshot()));
+                    loading_page_->setOnLongPress([this]() {
+                        std::string scan = MbotClient::rescanBus();
+                        loading_page_->setMessage(std::string("I2C scan (long-press to refresh):\n") + scan);
+                    });
+                    phase_                   = Phase::ConnectMbot;
+                    next_connect_attempt_ms_ = now;
+                    connect_backoff_ms_      = 500;
+                }
                 break;
             }
             GetStackChan().update();
             view::update_status_bar();
+            view::update_home_indicator();
+            break;
+
+        case Phase::MbotReconnect:
+            if (now >= next_connect_attempt_ms_) {
+                if (mbot.maintainLink()) {
+                    mbot_link_up_       = true;
+                    phase_              = resume_phase_;
+                    connect_backoff_ms_ = 500;
+                    notifyMbotStatus("mBot connected");
+                } else {
+                    const auto snap = mbot.snapshot();
+                    showMbotErrorToastIfNeeded(snap, now);
+                    next_connect_attempt_ms_ = now + connect_backoff_ms_;
+                    connect_backoff_ms_ =
+                        std::min<uint32_t>(connect_backoff_ms_ * 2U, 5000U);
+                }
+            }
+            if (resume_phase_ == Phase::AvatarIdle && avatar_attached_) {
+                GetStackChan().update();
+                view::update_status_bar();
+            }
             view::update_home_indicator();
             break;
 

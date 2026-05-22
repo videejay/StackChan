@@ -170,12 +170,21 @@ function tone(){api('POST','/api/tone',{freq:+document.getElementById('hz').valu
 function emotion(e){api('POST','/api/avatar/emotion',{emotion:e});}
 function bubbleSay(){api('POST','/api/avatar/speech',{text:document.getElementById('bubbleTxt').value});}
 function bubbleClear(){api('POST','/api/avatar/speech/clear');}
+let streamGen=0;
+function stopCamStream(){
+const img=document.getElementById('camStream');
+img.removeAttribute('src');
+img.classList.remove('on');
+}
 async function toggleStream(){
 const on=document.getElementById('streamEn').checked;
 const img=document.getElementById('camStream');
+const gen=++streamGen;
+if(!on){stopCamStream();}
 const j=await api('POST','/api/camera/stream',{enabled:on});
+if(gen!==streamGen)return;
 if(j&&j.ok&&on){img.src='/api/camera/stream.mjpg?t='+Date.now();img.classList.add('on');}
-else{img.src='';img.classList.remove('on');if(!j||!j.ok)document.getElementById('streamEn').checked=false;}
+else{stopCamStream();if(!j||!j.ok)document.getElementById('streamEn').checked=false;}
 }
 (function(){
 const pad=document.getElementById('joyPad'),knob=document.getElementById('joyKnob'),vals=document.getElementById('joyVals');
@@ -276,7 +285,7 @@ k.addEventListener('pointercancel',()=>offKey(k));});
 })();
 fetch('/api/status').then(r=>r.json()).then(j=>{if(j.ip)document.getElementById('log').textContent='IP '+j.ip;});
 window.addEventListener('pagehide',()=>{if(document.getElementById('streamEn').checked){
-fetch('/api/camera/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"enabled":false}',keepalive:true});}});
+stopCamStream();fetch('/api/camera/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"enabled":false}',keepalive:true});}});
 </script>
 </body>
 </html>

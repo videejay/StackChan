@@ -138,9 +138,10 @@ bool mbotWebStart(uint16_t port)
     stackchan_assets::early_init_launcher_assets();
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port    = port;
+    config.server_port      = port;
     config.max_uri_handlers = 24;
     config.lru_purge_enable = true;
+    config.stack_size       = 8192;
 
     if (httpd_start(&g_server, &config) != ESP_OK) {
         mclog::tagError(TAG, "httpd_start failed");
